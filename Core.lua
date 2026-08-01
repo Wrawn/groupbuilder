@@ -165,6 +165,7 @@ local function handleSlash(msg)
         GB:Print("|cff33ff99GroupBuilder commands:|r")
         GB:Print("  /gb                - open the options window")
         GB:Print("  /gb help           - show this command list")
+        GB:Print("  /gb vers           - print the addon version")
         GB:Print("  /gb on | off       - master switch (auto reply/invite/reform)", " [", toggle(GB.db.active), "]")
         GB:Print("  /gb status         - print current comp & needs to chat")
         GB:Print("  /gb show           - show the status window")
@@ -188,6 +189,9 @@ local function handleSlash(msg)
         GB.db.active = true;  GB:Print("master switch", toggle(true)); GB:UpdateAnnounce(); GB:NotifyActive(); GB:RefreshUI(); return
     elseif cmd == "off" then
         GB.db.active = false; GB:Print("master switch", toggle(false)); GB:RefreshUI(); return
+    elseif cmd == "vers" or cmd == "version" then
+        GB:Print("version |cff33ff99" .. tostring(GB.version) .. "|r")
+        return
     elseif cmd == "status" then
         GB:PrintStatus(); return
     elseif cmd == "show" then

@@ -15,6 +15,8 @@ section here.
 - **Auto-mark tanks** with raid icons — the 1st tank gets a circle, the 2nd a square,
   but only if they aren't already marked (and only when you're leader/assist). Toggle
   under Interface.
+- **`/gb vers`** — prints the addon version in chat (handy for checking everyone's on
+  the same version).
 - A plain-English **CHANGELOG** — GitHub release notes are now generated from it.
 
 ### Changed
