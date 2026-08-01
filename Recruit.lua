@@ -391,6 +391,12 @@ GB:On("CHAT_MSG_WHISPER", function(_, msg, author)
 
     local status = GB:GetStatus()
 
+    -- Group is full (or nothing left to recruit) — just say so.
+    if status.full or GB:NeedSummary(status, { short = true }) == "" then
+        GB:ReplyOnce(name, GB:Tag() .. ": we're full — thanks for whispering!")
+        return
+    end
+
     -- Their role: from this message, or one they told us earlier (so a later
     -- "aura"/"no" reply still maps to the right spot). Applicants aren't in the
     -- roster yet, so their earlier claim lives in the per-char DB.

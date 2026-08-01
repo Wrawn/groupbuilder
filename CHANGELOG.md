@@ -9,7 +9,9 @@ the new version + date. The GitHub release notes are generated from the matching
 section here.
 
 ## [Unreleased]
-_Nothing yet._
+### Fixed
+- Whispering a role when the group is full now gets "we're full — thanks for
+  whispering!" instead of "We're set on healers. We still need: ." (dangling).
 
 ## [0.3.0] — 2026-08-01
 ### Added
