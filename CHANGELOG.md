@@ -25,6 +25,9 @@ section here.
   full (instead of announcing nothing).
 
 ### Fixed
+- Names typed in the **Set Role / Aura** box now match group members regardless of
+  capitalization (before, "bob" wouldn't match "Bob", so the role wasn't counted).
+- Reply no longer says "**dpss**" — it now correctly reads "we're set on dps".
 - Status-window buttons no longer throw an error if the game hasn't loaded a
   newly-added addon file yet — they show a "fully restart the client" note instead.
 

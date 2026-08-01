@@ -438,8 +438,8 @@ GB:On("CHAT_MSG_WHISPER", function(_, msg, author)
         GB:ReplyOnce(name, ("%s: Thanks! We still need: %s."):format(GB:Tag(), GB:NeedSummary(status, { short = true })))
     elseif not roleNeeded then
         -- role already full (or fully committed) — never over-invite it
-        GB:ReplyOnce(name, ("%s: Thanks! We're set on %ss. We still need: %s."):format(
-            GB:Tag(), role, GB:NeedSummary(status, { short = true })))
+        GB:ReplyOnce(name, ("%s: Thanks! We're set on %s. We still need: %s."):format(
+            GB:Tag(), NEED_KEY[role] or role, GB:NeedSummary(status, { short = true })))
     elseif auraBlocks then
         -- last spots must bring an aura, and they can't
         GB:ReplyOnce(name, ("%s: Our last %d spot(s) need an aura for %s — whisper 'aura%s' if you can bring one!"):format(

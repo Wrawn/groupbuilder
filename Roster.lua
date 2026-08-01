@@ -15,9 +15,12 @@ GB.rosterByName = GB.rosterByName or {}
 
 local function normName(name)
     if not name then return nil end
-    -- strip a realm suffix if one ever appears, and normalise case for keys
+    -- strip a realm suffix if one ever appears
     name = name:match("^([^-]+)") or name
-    return name
+    if name == "" then return name end
+    -- WoW names are First-letter-capitalized; normalise so typed names (e.g. in
+    -- the Set Role box) match the roster regardless of how they were typed.
+    return name:sub(1, 1):upper() .. name:sub(2):lower()
 end
 GB.NormName = function(_, n) return normName(n) end
 
