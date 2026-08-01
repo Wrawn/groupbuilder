@@ -1,0 +1,20 @@
+## Interface: 30300
+## Title: GroupBuilder
+## Notes: Builds and maintains a leveling raid comp (tanks/healers/dps + auras) from whispers, keeps an auto-updating LFM macro, and rescales the group when someone dings 60.
+## Author: Aol
+## Version: 0.1.0
+## SavedVariables: GroupBuilderDB
+## SavedVariablesPerCharacter: GroupBuilderCharDB
+## X-Category: Group
+
+Config.lua
+Core.lua
+Roster.lua
+Recruit.lua
+Announce.lua
+Leveling.lua
+UI.lua
+Applicants.lua
+SetRole.lua
+Options.lua
+Panel.lua

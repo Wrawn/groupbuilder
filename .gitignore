@@ -1,0 +1,9 @@
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# WoW writes these into the client, never into the addon folder — but just in case
+*.bak
+SavedVariables/

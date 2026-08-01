@@ -1,0 +1,228 @@
+-- GroupBuilder :: UI.lua
+-- A small movable status window: current comp vs target, per-group aura coverage,
+-- and buttons to announce / reform.
+
+local addonName, GB = ...
+
+local frame
+local AURA_ROWS = 8   -- pool of per-group aura-holder rows
+
+-- Confirmation popup for removing a player's aura status.
+StaticPopupDialogs["GROUPBUILDER_REMOVE_AURA"] = {
+    text = "Remove aura status from %s?",
+    button1 = YES,
+    button2 = NO,
+    OnAccept = function(self)
+        local n = self.data
+        if n then
+            GB:SetClaim(n, { aura = false })
+            GB:Print(n .. " marked as |cffff5555NO aura|r.")
+            GB:UpdateAnnounce(); GB:RefreshUI()
+        end
+    end,
+    timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+}
+
+-- Confirm before a manual reform (it disbands the group).
+StaticPopupDialogs["GROUPBUILDER_REFORM"] = {
+    text = "Are you sure? This will DISBAND the group.\n\nIf you're trying to bring back players from the previous group, use |cff33ff99Reinvite|r instead.",
+    button1 = YES,
+    button2 = NO,
+    OnAccept = function() GB:ReformGroup(nil) end,
+    timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+}
+function GB:ConfirmReform()
+    if StaticPopup_Show then StaticPopup_Show("GROUPBUILDER_REFORM") else self:ReformGroup(nil) end
+end
+
+-- Roles popup (who is tank / healer).
+StaticPopupDialogs["GROUPBUILDER_ROLES"] = {
+    text = "%s",
+    button1 = OKAY,
+    timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+}
+function GB:ShowRoles()
+    self:RefreshRoster()
+    local tanks, heals = {}, {}
+    for _, m in ipairs(self.roster) do
+        local c = self.claims[m.name]
+        local r = c and c.role
+        if r == "tank" then tanks[#tanks + 1] = m.name
+        elseif r == "healer" then heals[#heals + 1] = m.name end
+    end
+    local t = #tanks > 0 and table.concat(tanks, ", ") or "-"
+    local h = #heals > 0 and table.concat(heals, ", ") or "-"
+    StaticPopup_Show("GROUPBUILDER_ROLES",
+        ("|cffc79c6eTanks (%d):|r %s\n\n|cff40c7ebHealers (%d):|r %s"):format(#tanks, t, #heals, h))
+end
+
+local function savePoint()
+    if not (frame and GB.db) then return end
+    local point, _, relPoint, x, y = frame:GetPoint()
+    GB.db.ui.point = { point, nil, relPoint, x, y }
+end
+
+local function createUI()
+    frame = CreateFrame("Frame", "GroupBuilderFrame", UIParent)
+    frame:SetWidth(240)
+    frame:SetHeight(250)
+    frame:SetBackdrop({
+        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true, tileSize = 16, edgeSize = 16,
+        insets = { left = 4, right = 4, top = 4, bottom = 4 },
+    })
+    frame:SetBackdropColor(0, 0, 0, 0.85)
+    frame:SetMovable(true)
+    frame:EnableMouse(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", function(self)
+        if not GB.db.ui.locked then self:StartMoving() end
+    end)
+    frame:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing(); savePoint()
+    end)
+
+    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("TOP", 0, -10)
+    title:SetText("GroupBuilder")
+    frame.title = title
+
+    local status = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    status:SetPoint("TOPLEFT", 12, -30)
+    status:SetPoint("TOPRIGHT", -12, -30)
+    status:SetJustifyH("LEFT")
+    status:SetJustifyV("TOP")
+    frame.status = status
+
+    -- per-group aura-holder rows (name + [x] to remove aura), below the status text
+    frame.auraRows = {}
+    for i = 1, AURA_ROWS do
+        local row = CreateFrame("Frame", nil, frame)
+        row:SetHeight(16); row:SetWidth(216)
+        if i == 1 then
+            row:SetPoint("TOPLEFT", status, "BOTTOMLEFT", 0, -4)
+        else
+            row:SetPoint("TOPLEFT", frame.auraRows[i - 1], "BOTTOMLEFT", 0, 0)
+        end
+        local fs = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        fs:SetPoint("LEFT", 0, 0); fs:SetWidth(196); fs:SetJustifyH("LEFT")
+        row.text = fs
+        local x = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+        x:SetWidth(16); x:SetHeight(16); x:SetPoint("RIGHT", 0, 0); x:SetText("x")
+        x:SetScript("OnClick", function()
+            if row.playerName then
+                StaticPopup_Show("GROUPBUILDER_REMOVE_AURA", row.playerName, nil, row.playerName)
+            end
+        end)
+        row.x = x
+        row:Hide()
+        frame.auraRows[i] = row
+    end
+
+    -- manual-invite toggle
+    local manual = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
+    manual:SetWidth(20); manual:SetHeight(20)
+    manual:SetPoint("BOTTOMLEFT", 12, 120)
+    local mlbl = manual:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    mlbl:SetPoint("LEFT", manual, "RIGHT", 2, 0)
+    mlbl:SetText("Manual invite (pick from list)")
+    manual:SetScript("OnClick", function(self)
+        GB.db.recruit.manualInvite = self:GetChecked() and true or false
+        if GB.RefreshApplicants then GB:RefreshApplicants() end
+        GB:RefreshUI()
+    end)
+    frame.manualCheck = manual
+
+    local function btn(text, w, x, y, anchor, onclick)
+        local b = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        b:SetWidth(w); b:SetHeight(22); b:SetPoint(anchor, x, y); b:SetText(text)
+        b:SetScript("OnClick", onclick)
+        return b
+    end
+
+    -- button grid
+    btn("Reform", 104, 12, 92, "BOTTOMLEFT", function() GB:ConfirmReform() end)
+    btn("Reinvite", 104, -12, 92, "BOTTOMRIGHT", function() GB:ReinviteGroup() end)
+    btn("Show Roles", 104, 12, 64, "BOTTOMLEFT", function() GB:ShowRoles() end)
+    btn("Set Role / Aura", 104, -12, 64, "BOTTOMRIGHT", function() GB:ShowSetRole() end)
+    btn("Role / Aura Check", 216, 12, 36, "BOTTOMLEFT", function() GB:AuraCheck() end)
+
+    -- restore position
+    local p = GB.db.ui.point
+    frame:ClearAllPoints()
+    if p and p[1] then
+        frame:SetPoint(p[1], UIParent, p[3] or p[1], p[4] or 0, p[5] or 0)
+    else
+        frame:SetPoint("CENTER")
+    end
+    GB.ui = frame
+end
+
+function GB:RefreshUI()
+    if not self.db then return end
+    if not frame then
+        if not self.db.ui.shown then return end
+        createUI()
+    end
+    if not self.db.ui.shown then frame:Hide(); return end
+    frame:Show()
+
+    local s = self:GetStatus()
+    local activeTag = self.db.active and "|cff55ff55active|r" or "|cffff5555paused|r"
+    local lines = {}
+    lines[#lines + 1] = ("Status: %s   %d/%d"):format(activeTag, s.headcount, s.comp.size or s.headcount)
+    lines[#lines + 1] = ("T %d/%d   H %d/%d   D %d/%d"):format(
+        s.have.tanks, s.comp.tanks, s.have.healers, s.comp.healers, s.have.dps, s.comp.dps)
+    if s.reservedFriends and #s.reservedFriends > 0 then
+        local r = {}
+        for _, f in ipairs(s.reservedFriends) do r[#r + 1] = ("%s(%s)"):format(f.name, f.role) end
+        lines[#lines + 1] = "|cff88bbffReserved:|r " .. table.concat(r, ", ")
+    end
+    if s.unknown > 0 then
+        lines[#lines + 1] = ("|cffaaaaaa%d unassigned|r"):format(s.unknown)
+    end
+    if s.full then
+        lines[#lines + 1] = "|cff55ff55GROUP FULL|r"
+    end
+    frame.status:SetText(table.concat(lines, "\n"))
+
+    -- Per-group aura coverage as rows, each holder with an [x] to remove aura.
+    local byGroup = {}
+    for _, m in ipairs(self.roster) do
+        local c = self.claims[m.name]
+        if c and c.aura then
+            local g = m.subgroup or 1
+            byGroup[g] = byGroup[g] or {}
+            byGroup[g][#byGroup[g] + 1] = m.name
+        end
+    end
+    local entries = {}
+    for g = 1, (s.comp.auras or 0) do
+        if byGroup[g] then
+            for _, nm in ipairs(byGroup[g]) do entries[#entries + 1] = { group = g, name = nm } end
+        else
+            entries[#entries + 1] = { group = g, name = nil }
+        end
+    end
+    for i = 1, AURA_ROWS do
+        local row, e = frame.auraRows[i], entries[i]
+        if e and e.name then
+            row.text:SetText(("|cff55ff55G%d aura:|r %s"):format(e.group, e.name))
+            row.playerName = e.name; row.x:Show(); row:Show()
+        elseif e then
+            row.text:SetText(("|cffff5555G%d aura: needed|r"):format(e.group))
+            row.playerName = nil; row.x:Hide(); row:Show()
+        else
+            row.playerName = nil; row:Hide()
+        end
+    end
+
+    -- size the window to fit the (variable) content above the bottom controls
+    local visible = math.min(#entries, AURA_ROWS)
+    local contentBottom = 30 + #lines * 13 + 6 + visible * 16
+    frame:SetHeight(math.max(240, contentBottom + 152))
+
+    if frame.manualCheck then frame.manualCheck:SetChecked(self.db.recruit.manualInvite and true or false) end
+    if self.RefreshApplicants then self:RefreshApplicants() end
+end
