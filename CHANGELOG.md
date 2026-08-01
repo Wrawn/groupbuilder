@@ -12,6 +12,9 @@ section here.
 ### Added
 - **Close (X) and Minimize buttons** on the status window. Minimize collapses it to a
   compact bar showing just the counts — Status, tanks/healers/dps, and auras (A x/x).
+- **Auto-mark tanks** with raid icons — the 1st tank gets a circle, the 2nd a square,
+  but only if they aren't already marked (and only when you're leader/assist). Toggle
+  under Interface.
 - A plain-English **CHANGELOG** — GitHub release notes are now generated from it.
 
 ### Changed

@@ -258,6 +258,9 @@ local function build()
     -- ---- Interface ----
     gap()
     makeHeader("Interface", L, nl(22))
+    makeCheck("Auto-mark tanks (circle / square)", L, nl(22),
+        function() return GB.db.markTanks end,
+        function(v) GB.db.markTanks = v; if v and GB.MarkTanks then GB:MarkTanks() end end)
     makeCheck("Hide minimap button", L, nl(22),
         function() return GB.db.minimap.hide end,
         function(v) GB.db.minimap.hide = v; if GB.RefreshMinimap then GB:RefreshMinimap() end end)

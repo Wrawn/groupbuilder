@@ -79,6 +79,10 @@ GB.defaults = {
         angle = 200,   -- degrees around the minimap
     },
 
+    -- Auto-mark tanks with raid icons: 1st tank -> circle (2), 2nd -> square (6),
+    -- only if they aren't already marked. Needs you to be leader/assist.
+    markTanks = true,
+
     -- Reserved slots for friends: [name] = "tank"|"healer"|"dps". Each friend not
     -- yet in the group holds a slot of their role, so random applicants don't take
     -- it; the friend themselves is always invited when they whisper.

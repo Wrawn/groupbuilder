@@ -96,7 +96,7 @@ function GB:RefreshRoster()
             local name, _, subgroup, level = GetRaidRosterInfo(i)
             if name then
                 name = normName(name)
-                local entry = { name = name, subgroup = subgroup or 1, level = level or 0 }
+                local entry = { name = name, subgroup = subgroup or 1, level = level or 0, unit = "raid" .. i }
                 self.roster[#self.roster + 1] = entry
                 self.rosterByName[name] = entry
             end
@@ -104,7 +104,7 @@ function GB:RefreshRoster()
     else
         -- party (including solo self)
         local me = normName(UnitName("player"))
-        local meEntry = { name = me, subgroup = 1, level = UnitLevel("player") or 0 }
+        local meEntry = { name = me, subgroup = 1, level = UnitLevel("player") or 0, unit = "player" }
         self.roster[#self.roster + 1] = meEntry
         self.rosterByName[me] = meEntry
         local numParty = GetNumPartyMembers()
@@ -112,7 +112,7 @@ function GB:RefreshRoster()
             local unit = "party" .. i
             local name = normName(UnitName(unit))
             if name then
-                local entry = { name = name, subgroup = 1, level = UnitLevel(unit) or 0 }
+                local entry = { name = name, subgroup = 1, level = UnitLevel(unit) or 0, unit = unit }
                 self.roster[#self.roster + 1] = entry
                 self.rosterByName[name] = entry
             end
@@ -130,6 +130,28 @@ function GB:RefreshRoster()
     if self.cdb and self.cdb.claims then
         for name, entry in pairs(self.rosterByName) do
             if self.cdb.claims[name] then self.claims[name] = self.cdb.claims[name] end
+        end
+    end
+
+    if self.MarkTanks then self:MarkTanks() end
+end
+
+-- Auto-mark tanks: 1st tank -> circle (2), 2nd -> square (6), only if unmarked.
+-- Needs you to be leader/assist (SetRaidTarget is restricted otherwise).
+function GB:MarkTanks()
+    if not (self.db and self.db.markTanks) then return end
+    if not self:CanLead() then return end
+    if not SetRaidTarget then return end
+    if GetNumRaidMembers() == 0 and GetNumPartyMembers() == 0 then return end   -- solo
+    local icons = { 2, 6 }   -- circle, square
+    local n = 0
+    for _, m in ipairs(self.roster) do
+        local c = self.claims[m.name]
+        if c and c.role == "tank" and m.unit then
+            n = n + 1
+            if n > #icons then break end
+            local cur = (GetRaidTargetIndex and GetRaidTargetIndex(m.unit)) or 0
+            if cur == 0 then SetRaidTarget(m.unit, icons[n]) end
         end
     end
 end
