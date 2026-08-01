@@ -180,6 +180,7 @@ local function handleSlash(msg)
         GB:Print("  /gb reform         - kick everyone & whisper them to pst 'reform'")
         GB:Print("  /gb reinvite       - send invites to the reform list (once you've left)")
         GB:Print("  /gb roles          - popup of who is tank / healer")
+        GB:Print("  /gb clear          - reset the tracked comp (clear all roles/auras)")
         GB:Print("  /gb events         - toggle event logging (find the leave-instance event)")
         GB:Print("  /gb friend add <name> [role] - reserve a slot for a friend (list/remove/clear)")
         return
@@ -270,6 +271,8 @@ local function handleSlash(msg)
         GB:ReinviteGroup(); return
     elseif cmd == "roles" then
         GB:ShowRoles(); return
+    elseif cmd == "clear" or cmd == "clearcomp" then
+        GB:ConfirmClearComp(); return
     elseif cmd == "macro" then
         GB:EnsureMacro(); return
     elseif cmd == "events" then

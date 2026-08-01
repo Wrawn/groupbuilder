@@ -35,6 +35,18 @@ function GB:ConfirmReform()
     if StaticPopup_Show then StaticPopup_Show("GROUPBUILDER_REFORM") else self:ReformGroup(nil) end
 end
 
+-- Confirm before clearing the tracked comp.
+StaticPopupDialogs["GROUPBUILDER_CLEARCOMP"] = {
+    text = "Clear the tracked comp?\n\nThis resets everyone's role and aura (T/H/D counts and aura holders go back to unassigned). Your target numbers are kept.",
+    button1 = YES,
+    button2 = NO,
+    OnAccept = function() GB:ClearComp() end,
+    timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+}
+function GB:ConfirmClearComp()
+    if StaticPopup_Show then StaticPopup_Show("GROUPBUILDER_CLEARCOMP") else self:ClearComp() end
+end
+
 -- Roles popup (who is tank / healer).
 StaticPopupDialogs["GROUPBUILDER_ROLES"] = {
     text = "%s",
@@ -146,7 +158,8 @@ local function createUI()
     btn("Reinvite", 104, -12, 92, "BOTTOMRIGHT", function() GB:ReinviteGroup() end)
     btn("Show Roles", 104, 12, 64, "BOTTOMLEFT", function() GB:ShowRoles() end)
     btn("Set Role / Aura", 104, -12, 64, "BOTTOMRIGHT", function() GB:ShowSetRole() end)
-    btn("Role / Aura Check", 216, 12, 36, "BOTTOMLEFT", function() GB:AuraCheck() end)
+    btn("Role / Aura Check", 104, 12, 36, "BOTTOMLEFT", function() GB:AuraCheck() end)
+    btn("Clear Comp", 104, -12, 36, "BOTTOMRIGHT", function() GB:ConfirmClearComp() end)
 
     -- restore position
     local p = GB.db.ui.point

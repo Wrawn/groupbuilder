@@ -44,6 +44,17 @@ function GB:ClearClaim(name)
     if self.cdb and self.cdb.claims then self.cdb.claims[name] = nil end
 end
 
+-- Reset the tracked comp: wipe every player's role/aura (target numbers stay).
+function GB:ClearComp()
+    wipe(self.claims)
+    if self.cdb then self.cdb.claims = {} end
+    if self.applicants then wipe(self.applicants) end
+    self._autoReplied = {}   -- let people be prompted again after a reset
+    self:RefreshRoster(); self:UpdateAnnounce(); self:RefreshUI()
+    if self.RefreshApplicants then self:RefreshApplicants() end
+    self:Print("cleared all tracked roles & auras — comp reset.")
+end
+
 -- Your own character's name.
 function GB:MyName()
     return normName(UnitName("player"))
