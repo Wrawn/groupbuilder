@@ -100,6 +100,24 @@ local function createUI()
     title:SetText("GroupBuilder")
     frame.title = title
 
+    -- close (X) + minimize buttons, top-right
+    local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+    close:SetPoint("TOPRIGHT", -2, -2)
+    close:SetScript("OnClick", function() GB.db.ui.shown = false; GB:RefreshUI() end)
+
+    local minBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    minBtn:SetWidth(18); minBtn:SetHeight(18)
+    minBtn:SetPoint("TOPRIGHT", -26, -7)
+    minBtn:SetText("_")
+    minBtn:SetScript("OnClick", function()
+        GB.db.ui.minimized = not GB.db.ui.minimized
+        GB:RefreshUI()
+    end)
+    frame.minBtn = minBtn
+
+    -- widgets hidden when minimized
+    frame.fullOnly = {}
+
     local status = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     status:SetPoint("TOPLEFT", 12, -30)
     status:SetPoint("TOPRIGHT", -12, -30)
@@ -145,11 +163,13 @@ local function createUI()
         GB:RefreshUI()
     end)
     frame.manualCheck = manual
+    frame.fullOnly[#frame.fullOnly + 1] = manual
 
     local function btn(text, w, x, y, anchor, onclick)
         local b = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
         b:SetWidth(w); b:SetHeight(22); b:SetPoint(anchor, x, y); b:SetText(text)
         b:SetScript("OnClick", onclick)
+        frame.fullOnly[#frame.fullOnly + 1] = b
         return b
     end
 
@@ -180,13 +200,29 @@ function GB:RefreshUI()
     end
     if not self.db.ui.shown then frame:Hide(); return end
     frame:Show()
+    if self.RefreshApplicants then self:RefreshApplicants() end
 
     local s = self:GetStatus()
+    local minimized = self.db.ui.minimized
+    if frame.minBtn then frame.minBtn:SetText(minimized and "+" or "_") end
+
     local activeTag = self.db.active and "|cff55ff55active|r" or "|cffff5555paused|r"
     local lines = {}
     lines[#lines + 1] = ("Status: %s   %d/%d"):format(activeTag, s.headcount, s.comp.size or s.headcount)
-    lines[#lines + 1] = ("T %d/%d   H %d/%d   D %d/%d"):format(
-        s.have.tanks, s.comp.tanks, s.have.healers, s.comp.healers, s.have.dps, s.comp.dps)
+    lines[#lines + 1] = ("T %d/%d  H %d/%d  D %d/%d  A %d/%d"):format(
+        s.have.tanks, s.comp.tanks, s.have.healers, s.comp.healers,
+        s.have.dps, s.comp.dps, s.auraHave, s.comp.auras or 0)
+
+    -- Minimized: just the two summary lines; hide rows, buttons and checkbox.
+    if minimized then
+        frame.status:SetText(table.concat(lines, "\n"))
+        for i = 1, AURA_ROWS do frame.auraRows[i]:Hide() end
+        for _, w in ipairs(frame.fullOnly) do w:Hide() end
+        frame:SetHeight(30 + #lines * 13 + 12)
+        return
+    end
+    for _, w in ipairs(frame.fullOnly) do w:Show() end
+
     if s.reservedFriends and #s.reservedFriends > 0 then
         local r = {}
         for _, f in ipairs(s.reservedFriends) do r[#r + 1] = ("%s(%s)"):format(f.name, f.role) end
@@ -237,5 +273,4 @@ function GB:RefreshUI()
     frame:SetHeight(math.max(240, contentBottom + 152))
 
     if frame.manualCheck then frame.manualCheck:SetChecked(self.db.recruit.manualInvite and true or false) end
-    if self.RefreshApplicants then self:RefreshApplicants() end
 end

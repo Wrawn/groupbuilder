@@ -68,6 +68,7 @@ GB.defaults = {
     -- UI.
     ui = {
         shown = true,
+        minimized = false,
         point = { "CENTER", nil, "CENTER", 0, 0 },
         locked = false,
     },

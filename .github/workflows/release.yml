@@ -19,11 +19,21 @@ jobs:
       - name: Build GroupBuilder.zip
         run: |
           mkdir -p dist/GroupBuilder
-          cp *.lua *.toc README.md dist/GroupBuilder/
+          cp *.lua *.toc README.md CHANGELOG.md dist/GroupBuilder/
           cd dist && zip -r GroupBuilder.zip GroupBuilder
+
+      - name: Release notes from CHANGELOG
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          awk -v ver="$VER" '
+            index($0, "## [" ver "]") == 1 { grab=1; next }
+            grab && index($0, "## [") == 1 { exit }
+            grab { print }
+          ' CHANGELOG.md > NOTES.md
+          if [ ! -s NOTES.md ]; then echo "See CHANGELOG.md for details." > NOTES.md; fi
 
       - name: Create / update release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/GroupBuilder.zip
-          generate_release_notes: true
+          body_path: NOTES.md
