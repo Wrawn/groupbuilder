@@ -9,6 +9,9 @@ the new version + date. The GitHub release notes are generated from the matching
 section here.
 
 ## [Unreleased]
+_Nothing yet._
+
+## [0.3.0] — 2026-08-01
 ### Added
 - **Close (X) and Minimize buttons** on the status window. Minimize collapses it to a
   compact bar showing just the counts — Status, tanks/healers/dps, and auras (A x/x).
