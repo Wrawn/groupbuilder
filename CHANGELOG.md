@@ -14,6 +14,11 @@ section here.
   compact bar showing just the counts — Status, tanks/healers/dps, and auras (A x/x).
 - A plain-English **CHANGELOG** — GitHub release notes are now generated from it.
 
+### Changed
+- The LFM announce now says **"— all auras covered"** when every group has an aura,
+  and posts **"Leveling MS group is FULL — thanks for whispering!"** when the group is
+  full (instead of announcing nothing).
+
 ### Fixed
 - Status-window buttons no longer throw an error if the game hasn't loaded a
   newly-added addon file yet — they show a "fully restart the client" note instead.

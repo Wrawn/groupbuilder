@@ -50,11 +50,14 @@ end
 function GB:AnnounceNeeds(status)
     status = status or self:GetStatus()
     local roleStr = roleParts(status)
+    -- When every group already has an aura, say so at the end.
+    local covered = ((status.comp.auras or 0) > 0 and status.auraNeed == 0)
+        and " — all auras covered" or ""
 
     if roleStr ~= "" then
         if status.auraRequired then return roleStr .. " + aura" end
         if status.auraNeed > 0 then return roleStr .. " (aura welcome)" end
-        return roleStr
+        return roleStr .. covered
     else
         -- roles full; only aura coverage missing
         if status.auraRequired then return "aura" end
@@ -68,7 +71,7 @@ end
 -- the end so nobody reads "1/15" as "need 1 of 15".
 function GB:BuildAnnounce(status)
     status = status or self:GetStatus()
-    if status.full then return nil end
+    if status.full then return "Leveling MS group is FULL — thanks for whispering!" end
 
     local size = status.comp.size or status.headcount
     local needs = self:AnnounceNeeds(status)
