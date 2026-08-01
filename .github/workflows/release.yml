@@ -1,0 +1,29 @@
+name: Release
+
+# Push a version tag (e.g. `git tag v0.2.0 && git push --tags`) and this builds a
+# drop-in GroupBuilder.zip and attaches it to a GitHub release automatically.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build GroupBuilder.zip
+        run: |
+          mkdir -p dist/GroupBuilder
+          cp *.lua *.toc README.md dist/GroupBuilder/
+          cd dist && zip -r GroupBuilder.zip GroupBuilder
+
+      - name: Create / update release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/GroupBuilder.zip
+          generate_release_notes: true
