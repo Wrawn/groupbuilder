@@ -165,21 +165,28 @@ local function createUI()
     frame.manualCheck = manual
     frame.fullOnly[#frame.fullOnly + 1] = manual
 
-    local function btn(text, w, x, y, anchor, onclick)
+    -- Call a GB method by name, but degrade gracefully if it isn't loaded (e.g. a
+    -- newly-added file the client hasn't picked up until a full restart).
+    local function call(method)
+        if GB[method] then GB[method](GB)
+        else GB:Print("|cffff5555" .. method .. " isn't loaded.|r Fully exit and restart the game client (not just /reload) so new addon files load.") end
+    end
+
+    local function btn(text, w, x, y, anchor, method)
         local b = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
         b:SetWidth(w); b:SetHeight(22); b:SetPoint(anchor, x, y); b:SetText(text)
-        b:SetScript("OnClick", onclick)
+        b:SetScript("OnClick", function() call(method) end)
         frame.fullOnly[#frame.fullOnly + 1] = b
         return b
     end
 
     -- button grid
-    btn("Reform", 104, 12, 92, "BOTTOMLEFT", function() GB:ConfirmReform() end)
-    btn("Reinvite", 104, -12, 92, "BOTTOMRIGHT", function() GB:ReinviteGroup() end)
-    btn("Show Roles", 104, 12, 64, "BOTTOMLEFT", function() GB:ShowRoles() end)
-    btn("Set Role / Aura", 104, -12, 64, "BOTTOMRIGHT", function() GB:ShowSetRole() end)
-    btn("Role / Aura Check", 104, 12, 36, "BOTTOMLEFT", function() GB:AuraCheck() end)
-    btn("Clear Comp", 104, -12, 36, "BOTTOMRIGHT", function() GB:ConfirmClearComp() end)
+    btn("Reform", 104, 12, 92, "BOTTOMLEFT", "ConfirmReform")
+    btn("Reinvite", 104, -12, 92, "BOTTOMRIGHT", "ReinviteGroup")
+    btn("Show Roles", 104, 12, 64, "BOTTOMLEFT", "ShowRoles")
+    btn("Set Role / Aura", 104, -12, 64, "BOTTOMRIGHT", "ShowSetRole")
+    btn("Role / Aura Check", 104, 12, 36, "BOTTOMLEFT", "AuraCheck")
+    btn("Clear Comp", 104, -12, 36, "BOTTOMRIGHT", "ConfirmClearComp")
 
     -- restore position
     local p = GB.db.ui.point

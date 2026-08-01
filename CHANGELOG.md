@@ -14,6 +14,10 @@ section here.
   compact bar showing just the counts — Status, tanks/healers/dps, and auras (A x/x).
 - A plain-English **CHANGELOG** — GitHub release notes are now generated from it.
 
+### Fixed
+- Status-window buttons no longer throw an error if the game hasn't loaded a
+  newly-added addon file yet — they show a "fully restart the client" note instead.
+
 ## [0.2.0] — 2026-08-01
 ### Added
 - **Clear Comp** button (and `/gb clear`) — resets everyone's tracked role and aura
