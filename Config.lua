@@ -79,6 +79,12 @@ GB.defaults = {
         angle = 200,   -- degrees around the minimap
     },
 
+    -- Players exempt from the sub-60 autokick (you, friends, etc). Account-wide
+    -- and kept permanently — not reset per group. [name] = true. Reserved friends
+    -- are also exempt automatically. Whitelisted players are still reformed if
+    -- they actually hit 60.
+    whitelist = {},
+
     -- Auto-mark tanks with raid icons: 1st tank -> circle (2), 2nd -> square (6),
     -- only if they aren't already marked. Needs you to be leader/assist.
     markTanks = true,

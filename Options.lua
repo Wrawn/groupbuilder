@@ -251,7 +251,7 @@ local function build()
     makeCheck("Enable?", L, nl(24),
         function() return GB.db.leveling.enabled end,
         function(v) GB.db.leveling.enabled = v end)
-    makeEdit("Max level", L, nl(24), 32,
+    makeEdit("Kick at level (60 = reform only)", L, nl(24), 32,
         function() return GB.db.leveling.maxLevel end,
         function(v) GB.db.leveling.maxLevel = math.max(1, math.floor(v)) end, true)
 

@@ -41,19 +41,35 @@ local function amLeader()
     return IsPartyLeader() and true or false
 end
 
--- Consider a member's level; fire a reform if they just crossed maxLevel.
+-- The level at which mobs actually scale up (game cap). The Max level box is the
+-- (optionally lower) autokick threshold.
+local SCALE_LEVEL = 60
+
+-- Consider a member's level.
+--  * Crossing SCALE_LEVEL (60) always means the group scaled -> full reform.
+--  * If the Max level box is below 60, a non-whitelisted member who reaches it is
+--    single-kicked (removed before they can scale the group) — no reform needed.
 local function considerLevel(name, level)
     if not name or not level or level <= 0 then return end
     name = GB:NormName(name)
     if name == GB:NormName(UnitName("player")) then
         levelSeen[name] = level
-        return -- never reform on our own ding (we can't kick ourselves)
+        return -- never act on our own ding (we can't kick ourselves)
     end
     local prev = levelSeen[name]
     levelSeen[name] = level
-    local maxLevel = (GB.db and GB.db.leveling.maxLevel) or 60
-    if prev and prev < maxLevel and level >= maxLevel then
+    local maxLevel = (GB.db and GB.db.leveling.maxLevel) or SCALE_LEVEL
+
+    -- hit 60 -> full reform (even whitelisted players)
+    if prev and prev < SCALE_LEVEL and level >= SCALE_LEVEL then
         GB:OnMemberDinged(name)
+        return
+    end
+
+    -- sub-60 autokick: any non-whitelisted member at/above the threshold (but
+    -- still under 60) is removed. Level-based (also catches high-level joiners).
+    if maxLevel < SCALE_LEVEL and level >= maxLevel and level < SCALE_LEVEL then
+        if not GB:IsWhitelisted(name) then GB:AutoKick(name) end
     end
 end
 
@@ -98,18 +114,17 @@ GB:On("RAID_ROSTER_UPDATE", function() scanLevels() end)
 -- ---------------------------------------------------------------------------
 local MAX_SCALING_TICKS = 40   -- safety cap (~2 min) so it can't spam forever
 
--- True while a non-self group member is at/above maxLevel (mobs are scaled).
+-- True while a non-self group member is at/above 60 (mobs are scaled).
 local function scalingStillActive()
-    local maxLevel = GB.db.leveling.maxLevel or 60
     local me = GB:NormName(UnitName("player"))
     if GetNumRaidMembers() > 0 then
         for i = 1, GetNumRaidMembers() do
             local n, _, _, lvl = GetRaidRosterInfo(i)
-            if n and GB:NormName(n) ~= me and (lvl or 0) >= maxLevel then return true end
+            if n and GB:NormName(n) ~= me and (lvl or 0) >= SCALE_LEVEL then return true end
         end
     else
         for i = 1, GetNumPartyMembers() do
-            if (UnitLevel("party" .. i) or 0) >= maxLevel then return true end
+            if (UnitLevel("party" .. i) or 0) >= SCALE_LEVEL then return true end
         end
     end
     return false
@@ -117,16 +132,15 @@ end
 
 function GB:ScalingTick()
     if not self._scalingAlertOn then return end
-    local maxLevel = self.db.leveling.maxLevel or 60
     self._scalingTicks = (self._scalingTicks or 0) + 1
     if scalingStillActive() and self._scalingTicks <= MAX_SCALING_TICKS then
-        SendChatMessage(("Level %d scaling ACTIVE — hold pulls, reforming!"):format(maxLevel),
+        SendChatMessage(("Level %d scaling ACTIVE — hold pulls, reforming!"):format(SCALE_LEVEL),
             GetNumRaidMembers() > 0 and "RAID_WARNING" or "PARTY")
         self:After(3, function() GB:ScalingTick() end)
     else
         self._scalingAlertOn = false
         if self._scalingTicks > 1 then   -- we actually warned at least once
-            SendChatMessage(("Level %d scaling cleared — good to go!"):format(maxLevel),
+            SendChatMessage(("Level %d scaling cleared — good to go!"):format(SCALE_LEVEL),
                 GetNumRaidMembers() > 0 and "RAID_WARNING" or "PARTY")
         end
     end
@@ -141,19 +155,31 @@ function GB:StartScalingAlert()
 end
 
 -- ---------------------------------------------------------------------------
---  Reform
+--  Autokick (sub-60) and Reform (60)
 -- ---------------------------------------------------------------------------
+
+-- Single-kick a member who reached the sub-60 threshold, with a friendly whisper.
+-- Once per member (the guard is cleared when they leave the group).
+function GB:AutoKick(name)
+    if not (self.db and self.db.leveling.enabled) then return end
+    if not amLeader() then return end
+    self._autoKicked = self._autoKicked or {}
+    if self._autoKicked[name] then return end
+    self._autoKicked[name] = true
+    self:Reply(name, ("%s: thanks for coming! I'm removing you now you've hit %d, so you don't scale the mobs to 60 for the rest of the group. GG — whisper me for a re-invite once you've rerolled!"):format(
+        self:Tag(), self.db.leveling.maxLevel or 59))
+    local entry = self.rosterByName[name]
+    UninviteUnit(entry and entry.unit or name)
+    self:Print("|cffffcc00" .. name .. "|r hit " .. (self.db.leveling.maxLevel or 59) .. " — auto-kicked (not whitelisted).")
+end
+
 function GB:OnMemberDinged(dinger)
     if not (self.db and self.db.leveling.enabled) then return end
     -- Only the leader handles the ding (only they can reform); if you're not the
     -- leader, stay quiet — whoever leads the group takes care of it.
     if not amLeader() then return end
-    self:Print("|cffffcc00" .. dinger .. " reached max level!|r")
+    self:Print("|cffffcc00" .. dinger .. " hit " .. SCALE_LEVEL .. "!|r")
     self:StartScalingAlert()   -- keep warning /rw every 3s until the 60 is gone
-    if not self.db.active then
-        self:Print("(master switch off — not reforming. /gb on to enable, or /gb reform to do it now.)")
-        return
-    end
     if not self.db.leveling.autoReform then
         self:Print("(auto-reform disabled — /gb reform to do it manually.)")
         return
@@ -180,7 +206,10 @@ function GB:ReformGroup(dinger)
     local keepers = {}
     for _, m in ipairs(self.roster) do
         if m.name ~= me and m.name ~= dinger then
-            self._reformList[m.name] = (self.claims[m.name] and self.claims[m.name].role) or true
+            self._reformList[m.name] = {
+                role = self.claims[m.name] and self.claims[m.name].role or nil,
+                level = m.level or 0,
+            }
             keepers[#keepers + 1] = m.name
         end
     end
@@ -190,7 +219,7 @@ function GB:ReformGroup(dinger)
     if self.db.leveling.announceReform then
         local msg = dinger
             and ("Level %d scaling detected — reforming to reset it! Kicking now; pst me 'reform' for a re-invite."):format(
-                self.db.leveling.maxLevel)
+                SCALE_LEVEL)
             or  "Reforming group — kicking now; pst me 'reform' for a re-invite."
         SendChatMessage(msg, GetNumRaidMembers() > 0 and "RAID_WARNING" or "PARTY")
     end
@@ -225,18 +254,26 @@ function GB:ReformGroup(dinger)
     self:RefreshRoster(); GB:UpdateAnnounce(); GB:RefreshUI()
 end
 
--- Send invites to everyone on the reform list who isn't already back in the group.
+-- Send invites to everyone on the reform list who isn't already back and isn't
+-- level 60 (re-inviting a 60 would just scale the group again).
 function GB:ReinviteGroup()
     if not (self._reformList and next(self._reformList)) then
         self:Print("no reform list to re-invite.")
         return
     end
     self:RefreshRoster()
-    local n = 0
-    for name in pairs(self._reformList) do
-        if not self.rosterByName[name] then InviteUnit(name); n = n + 1 end
+    local n, skipped = 0, 0
+    for name, info in pairs(self._reformList) do
+        local lvl = (type(info) == "table" and info.level) or 0
+        if self.rosterByName[name] then
+            -- already back
+        elseif lvl >= SCALE_LEVEL then
+            skipped = skipped + 1   -- a 60 — don't invite (would re-scale)
+        else
+            InviteUnit(name); n = n + 1
+        end
     end
-    self:Print(("sent %d re-invite(s)."):format(n))
+    self:Print(("sent %d re-invite(s)%s."):format(n, skipped > 0 and (", skipped " .. skipped .. " at 60") or ""))
 end
 
 -- Leaving the Manastorm changes zone. On Ascension that fires

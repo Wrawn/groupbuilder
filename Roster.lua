@@ -136,6 +136,13 @@ function GB:RefreshRoster()
         end
     end
 
+    -- clear the autokick once-guard for anyone who has left (so a re-join re-kicks)
+    if self._autoKicked then
+        for n in pairs(self._autoKicked) do
+            if not self.rosterByName[n] then self._autoKicked[n] = nil end
+        end
+    end
+
     if self.MarkTanks then self:MarkTanks() end
 end
 

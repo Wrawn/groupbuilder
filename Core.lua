@@ -35,6 +35,15 @@ function GB:AnyLooms()
     return r and true or false
 end
 
+-- Whitelisted from the sub-60 autokick? (explicit whitelist OR a reserved friend)
+function GB:IsWhitelisted(name)
+    name = self:NormName(name)
+    if not name then return false end
+    if self.db.whitelist and self.db.whitelist[name] then return true end
+    if self.db.friends and self.db.friends[name] then return true end
+    return false
+end
+
 -- True if you can actually run the group: raid leader/assist, party leader, or
 -- solo (about to form your own). Recruiting/polling/reform only happen when true.
 function GB:CanLead()
@@ -184,6 +193,7 @@ local function handleSlash(msg)
         GB:Print("  /gb clear          - reset the tracked comp (clear all roles/auras)")
         GB:Print("  /gb events         - toggle event logging (find the leave-instance event)")
         GB:Print("  /gb friend add <name> [role] - reserve a slot for a friend (list/remove/clear)")
+        GB:Print("  /gb whitelist add <name>|me - exempt from the sub-60 autokick (list/remove/clear)")
         return
     elseif cmd == "on" then
         GB.db.active = true;  GB:Print("master switch", toggle(true)); GB:UpdateAnnounce(); GB:NotifyActive(); GB:RefreshUI(); return
@@ -324,6 +334,30 @@ local function handleSlash(msg)
             if not any then GB:Print("  (none). Add one: /gb friend add <name> [tank|healer|dps]") end
         end
         GB:UpdateAnnounce(); GB:RefreshUI(); return
+    elseif cmd == "whitelist" or cmd == "wl" then
+        GB.db.whitelist = GB.db.whitelist or {}
+        local sub, arg = rest:match("^(%S*)%s*(.-)%s*$")
+        sub = (sub or ""):lower()
+        local pname = arg:match("^(%S+)")
+        if pname and pname:lower() == "me" then pname = GB:MyName() end
+        if sub == "add" then
+            if not pname then GB:Print("usage: /gb whitelist add <name>  (or 'me')"); return end
+            pname = GB:NormName(pname); GB.db.whitelist[pname] = true
+            GB:Print(pname .. " added to the autokick whitelist (exempt below 60).")
+        elseif sub == "remove" or sub == "rem" or sub == "del" then
+            pname = pname and GB:NormName(pname)
+            if pname and GB.db.whitelist[pname] then GB.db.whitelist[pname] = nil; GB:Print("removed " .. pname .. " from the whitelist.")
+            else GB:Print("that name isn't on the whitelist.") end
+        elseif sub == "clear" then
+            GB.db.whitelist = {}; GB:Print("whitelist cleared.")
+        else
+            GB:Print("autokick whitelist (exempt from the sub-60 kick):")
+            local any = false
+            for n in pairs(GB.db.whitelist) do any = true; GB:Print("  " .. n) end
+            if not any then GB:Print("  (none). Add: /gb whitelist add <name>  |  add me") end
+            GB:Print("|cffaaaaaa(reserved friends are also exempt.)|r")
+        end
+        return
     else
         GB:Print("unknown command. /gb help")
     end
