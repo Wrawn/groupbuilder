@@ -73,12 +73,18 @@ local function considerLevel(name, level)
     end
 end
 
+-- Best level reading we can get: GetRaidRosterInfo is 0 for distant members,
+-- UnitLevel is 0 for members out of range — take whichever is higher.
+local function bestLevel(unit, rosterLevel)
+    return math.max(rosterLevel or 0, (unit and UnitLevel(unit)) or 0)
+end
+
 -- Scan the whole group's levels (backup for missed UNIT_LEVEL events).
 local function scanLevels()
     if GetNumRaidMembers() > 0 then
         for i = 1, GetNumRaidMembers() do
             local n, _, _, lvl = GetRaidRosterInfo(i)
-            considerLevel(n, lvl)
+            considerLevel(n, bestLevel("raid" .. i, lvl))
         end
     else
         considerLevel(UnitName("player"), UnitLevel("player"))
@@ -86,6 +92,32 @@ local function scanLevels()
             local u = "party" .. i
             considerLevel(UnitName(u), UnitLevel(u))
         end
+    end
+end
+
+-- Diagnostic: /gb levels — shows what the addon reads, so autokick issues are
+-- easy to pin down (level 0 = the client can't see that member's level).
+function GB:DebugLevels()
+    local maxLevel = self.db.leveling.maxLevel or 60
+    self:Print(("Kick at level: |cff33ff99%d|r  |  Anti-scaling enabled: %s  |  you lead: %s"):format(
+        maxLevel, tostring(self.db.leveling.enabled), tostring(amLeader())))
+    if maxLevel >= 60 then self:Print("  (set 'Kick at level' below 60 to enable the early autokick)") end
+    local me = self:NormName(UnitName("player"))
+    local function line(name, unit, rosterLvl)
+        if not name then return end
+        local n = self:NormName(name)
+        local lvl = bestLevel(unit, rosterLvl)
+        local tag = (n == me) and " (you)" or (self:IsWhitelisted(n) and " |cff55ff55[whitelist]|r"
+            or (maxLevel < 60 and lvl >= maxLevel and lvl < 60 and " |cffff5555<- would kick|r" or ""))
+        self:Print(("  %s: lvl %d%s"):format(n, lvl, tag))
+    end
+    if GetNumRaidMembers() > 0 then
+        for i = 1, GetNumRaidMembers() do local nm, _, _, lvl = GetRaidRosterInfo(i); line(nm, "raid" .. i, lvl) end
+    elseif GetNumPartyMembers() > 0 then
+        line(UnitName("player"), "player", nil)
+        for i = 1, GetNumPartyMembers() do line(UnitName("party" .. i), "party" .. i, nil) end
+    else
+        self:Print("  (not in a group)")
     end
 end
 

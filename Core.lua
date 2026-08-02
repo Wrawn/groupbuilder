@@ -199,6 +199,8 @@ local function handleSlash(msg)
         GB.db.active = true;  GB:Print("master switch", toggle(true)); GB:UpdateAnnounce(); GB:NotifyActive(); GB:RefreshUI(); return
     elseif cmd == "off" then
         GB.db.active = false; GB:Print("master switch", toggle(false)); GB:RefreshUI(); return
+    elseif cmd == "levels" then
+        GB:DebugLevels(); return
     elseif cmd == "vers" or cmd == "version" then
         GB:Print("version |cff33ff99" .. tostring(GB.version) .. "|r")
         return
