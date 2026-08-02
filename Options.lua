@@ -254,6 +254,9 @@ local function build()
     makeEdit("Kick at level (60 = reform only)", L, nl(24), 32,
         function() return GB.db.leveling.maxLevel end,
         function(v) GB.db.leveling.maxLevel = math.max(1, math.floor(v)) end, true)
+    makeButton("Whitelist (exempt from autokick)", L, nl(26), 220, function()
+        if GB.ShowWhitelist then GB:ShowWhitelist() end
+    end)
 
     -- ---- Interface ----
     gap()

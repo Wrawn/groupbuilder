@@ -14,9 +14,10 @@ section here.
   member who reaches it is single-kicked *before* they scale the group to 60 — with a
   friendly "thanks for coming, removed to avoid scaling" whisper — so you skip the full
   reform. Hitting **60** still does the full reform.
-- **Whitelist** (`/gb whitelist add <name>` / `me`, list/remove/clear) — a permanent,
-  account-wide list of players exempt from the sub-60 autokick (you, friends). Reserved
-  friends are exempt automatically. Whitelisted players are still reformed if they hit 60.
+- **Whitelist** — a permanent, account-wide list of players exempt from the sub-60
+  autokick (you, friends). Manage it from a **Whitelist window** (button in the
+  Anti-scaling options) with add / Add Me / remove, or the `/gb whitelist` chat commands.
+  Reserved friends are exempt automatically. Whitelisted players are still reformed at 60.
 
 ### Changed
 - **Reinvite** no longer re-invites anyone at level 60 (that would just re-scale the group).

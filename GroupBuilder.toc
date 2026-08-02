@@ -16,5 +16,6 @@ Leveling.lua
 UI.lua
 Applicants.lua
 SetRole.lua
+Whitelist.lua
 Options.lua
 Panel.lua
