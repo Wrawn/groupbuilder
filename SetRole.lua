@@ -76,7 +76,7 @@ local function build()
         local name = frame.nameBox:GetText()
         if not name or name:gsub("%s", "") == "" then GB:Print("enter a name first."); return end
         name = GB:NormName(name)
-        GB:SetClaim(name, { role = selRole, aura = selAura })
+        GB:SetClaim(name, { role = selRole, aura = selAura, source = "manual override" })
         GB:Print(("set |cffffff00%s|r = %s%s."):format(name, selRole, selAura and " + aura" or ", no aura"))
         GB:UpdateAnnounce(); GB:RefreshUI()
         frame.nameBox:SetText("")

@@ -10,6 +10,16 @@ section here.
 
 ## [Unreleased]
 ### Added
+- **`/gb debug`** — a dry-run panel. Buttons for Reinvite / Reform / Clear Comp / Set
+  Role / Autokick-state each show what GB *would* do (who it'd invite/kick and why, the
+  live per-player autokick table) in a copy-pasteable window. Nothing is performed.
+- **`/gb monitor`** — a live window of players within 5 levels of the autokick cutoff,
+  shown as `Name (Role)`, auto-updating on level/roster changes. Plus a **private**
+  (only-you) raid-warning-style alert when a **tank/healer** is autokicked, e.g.
+  `WARNING HEALER AUTOKICKED, 2 HEALERS LEFT!`.
+- **Manual-invite tracking** — when someone joins that GB didn't invite (e.g. a normal
+  right-click invite), GB whispers them for role + aura so autokick/reform treat them
+  consistently. No reply = they stay "unknown" (never assumed). Toggle in Whisper options.
 - **Early autokick (no full reform).** Set **Kick at level** below 60 (e.g. 59) and a
   member who reaches it is single-kicked *before* they scale the group to 60 — with a
   friendly "thanks for coming, removed to avoid scaling" whisper — so you skip the full

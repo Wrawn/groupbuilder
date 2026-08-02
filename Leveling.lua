@@ -198,11 +198,23 @@ function GB:AutoKick(name)
     self._autoKicked = self._autoKicked or {}
     if self._autoKicked[name] then return end
     self._autoKicked[name] = true
+    local role = self.claims[name] and self.claims[name].role
     self:Reply(name, ("%s: thanks for coming! I'm removing you now you've hit %d, so you don't scale the mobs to 60 for the rest of the group. GG — whisper me for a re-invite once you've rerolled!"):format(
         self:Tag(), self.db.leveling.maxLevel or 59))
     local entry = self.rosterByName[name]
     UninviteUnit(entry and entry.unit or name)
     self:Print("|cffffcc00" .. name .. "|r hit " .. (self.db.leveling.maxLevel or 59) .. " — auto-kicked (not whitelisted).")
+
+    -- Private on-screen alert if we lost a tank or healer.
+    if (role == "tank" or role == "healer") and self.KickAlert then
+        local remaining = 0
+        for _, m in ipairs(self.roster) do
+            if m.name ~= name and self.claims[m.name] and self.claims[m.name].role == role then
+                remaining = remaining + 1
+            end
+        end
+        self:KickAlert(role, remaining)
+    end
 end
 
 function GB:OnMemberDinged(dinger)
@@ -302,7 +314,7 @@ function GB:ReinviteGroup()
         elseif lvl >= SCALE_LEVEL then
             skipped = skipped + 1   -- a 60 — don't invite (would re-scale)
         else
-            InviteUnit(name); n = n + 1
+            GB:Invite(name); n = n + 1
         end
     end
     self:Print(("sent %d re-invite(s)%s."):format(n, skipped > 0 and (", skipped " .. skipped .. " at 60") or ""))

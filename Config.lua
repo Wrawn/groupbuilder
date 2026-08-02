@@ -52,6 +52,7 @@ GB.defaults = {
         manualInvite = false,-- queue applicants in a list with Invite buttons instead
         askAura    = true,   -- ask about auras (recruit prompts + poll group members)
         askLooms   = true,   -- ask applicants whether they have heirlooms
+        askNewMembers = true,-- whisper role/aura to members who joined via a non-GB (manual) invite
         cooldown   = 20,     -- seconds between auto-replies to the same person
         reserveDps = 3,      -- keep this many dps spots open (for aura-dps) until tanks+healers fill
     },

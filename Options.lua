@@ -233,6 +233,9 @@ local function build()
     makeCheck("Ask if they have heirlooms?", L, nl(22),
         function() return GB.db.recruit.askLooms end,
         function(v) GB.db.recruit.askLooms = v end)
+    makeCheck("Ask manually-invited members for role/aura", L, nl(22),
+        function() return GB.db.recruit.askNewMembers end,
+        function(v) GB.db.recruit.askNewMembers = v end)
     makeEdit("Reply cooldown (sec)", L, nl(24), 32,
         function() return GB.db.recruit.cooldown end,
         function(v) GB.db.recruit.cooldown = math.max(0, math.floor(v)) end, true)

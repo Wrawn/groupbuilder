@@ -81,7 +81,7 @@ end
 
 -- Send an invite and confirm to the applicant.
 function GB:InviteApplicant(name, role)
-    InviteUnit(name)
+    self:Invite(name)
     self:Reply(name, ("%s: Inviting you%s! Please accept."):format(
         self:Tag(), role and (" as " .. role) or ""))
 end
@@ -125,6 +125,50 @@ end)
 local pending = {}   -- [name] = { role = <role>, at = <time> }
 function GB:MarkPending(name, role)
     pending[name] = { role = role, at = GetTime() }
+end
+
+-- Invite through GB so we know we invited them (vs a manual Blizzard invite).
+GB._gbInvited = GB._gbInvited or {}
+function GB:Invite(name)
+    name = self:NormName(name)
+    self._gbInvited[name] = GetTime()
+    InviteUnit(name)
+end
+
+-- Ask a manually-invited newcomer their role + aura (once), so autokick/reform
+-- treat them like GB-invited players. No reply -> they stay "unknown".
+function GB:AskNewMember(name)
+    if not (self.db and self.db.recruit.askNewMembers) then return end
+    self._askedNew = self._askedNew or {}
+    if self._askedNew[name] then return end
+    self._askedNew[name] = GetTime()
+    self:Reply(name, self:Tag() .. ": welcome! Quick one so I slot you right — what's your role (tank/heals/dps), and do you have an aura? Reply e.g. 'dps aura' or 'tank no aura'.")
+end
+
+-- On roster changes, find members who joined via a non-GB invite (or party sync /
+-- unknown source) with no data yet, and ask them. Only when you lead the group.
+function GB:CheckNewMembers()
+    self._seenMembers = self._seenMembers or {}
+    if not self:CanLead() then
+        for n in pairs(self.rosterByName) do self._seenMembers[n] = true end
+        return
+    end
+    local me = self:MyName()
+    local now = GetTime()
+    for name in pairs(self.rosterByName) do
+        if name ~= me and not self._seenMembers[name] then
+            self._seenMembers[name] = true
+            local gbInvited = self._gbInvited and self._gbInvited[name] and (now - self._gbInvited[name]) < 300
+            local c = self.claims[name]
+            local haveData = c and (c.role ~= nil or c.aura ~= nil)
+            if not gbInvited and not haveData then
+                self:AskNewMember(name)   -- manual/unknown invite, no data -> ask
+            end
+        end
+    end
+    -- forget people who left so a re-join is treated fresh
+    for n in pairs(self._seenMembers) do if not self.rosterByName[n] then self._seenMembers[n] = nil end end
+    if self._askedNew then for n in pairs(self._askedNew) do if not self.rosterByName[n] then self._askedNew[n] = nil end end end
 end
 
 -- Applicant queue for manual-invite mode: people who whispered to join, with the
@@ -182,6 +226,7 @@ local function handleGroupMemberReply(name, parsed)
     local c = {}
     if parsed.namedRole then
         c.role = parsed.roles.tank and "tank" or parsed.roles.healer and "healer" or "dps"
+        c.source = "self-reported"
     end
     if parsed.aura then
         c.aura = true
@@ -328,7 +373,7 @@ GB:On("CHAT_MSG_WHISPER", function(_, msg, author)
             -- don't re-invite the person we just removed for hitting max level
             GB:Reply(name, GB:Tag() .. ": you hit max level — staying out so the mobs don't scale. GG!")
         else
-            InviteUnit(name)
+            GB:Invite(name)
             GB:Reply(name, GB:Tag() .. ": invite sent — accept to rejoin!")
         end
         return
@@ -349,7 +394,7 @@ GB:On("CHAT_MSG_WHISPER", function(_, msg, author)
     -- Someone on the reform list (a member we just kicked): re-invite them, no
     -- recruit prompt — they're already known with a role.
     if GB._reformList and GB._reformList[name] then
-        InviteUnit(name)
+        GB:Invite(name)
         GB:Reply(name, GB:Tag() .. ": re-inviting you — accept to rejoin!")
         return
     end
@@ -405,7 +450,7 @@ GB:On("CHAT_MSG_WHISPER", function(_, msg, author)
 
     -- Record what they told us this time.
     local c = {}
-    if role then c.role = role end
+    if role then c.role = role; c.source = "self-reported" end
     if parsed.aura then c.aura = true elseif parsed.auraNo or parsed.bareNo then c.aura = false end
     if parsed.looms then c.looms = true end
     if next(c) then GB:SetClaim(name, c) end

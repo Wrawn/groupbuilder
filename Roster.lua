@@ -99,7 +99,9 @@ function GB:RefreshRoster()
             local name, _, subgroup, level = GetRaidRosterInfo(i)
             if name then
                 name = normName(name)
-                local entry = { name = name, subgroup = subgroup or 1, level = level or 0, unit = "raid" .. i }
+                local unit = "raid" .. i
+                level = math.max(level or 0, (UnitLevel and UnitLevel(unit)) or 0)
+                local entry = { name = name, subgroup = subgroup or 1, level = level, unit = unit }
                 self.roster[#self.roster + 1] = entry
                 self.rosterByName[name] = entry
             end
@@ -277,8 +279,15 @@ end
 -- press the Role/Aura Check button — so joining random groups stays quiet.
 GB:On("RAID_ROSTER_UPDATE", function()
     GB:RefreshRoster(); GB:UpdateAnnounce(); GB:RefreshUI()
+    if GB.CheckNewMembers then GB:CheckNewMembers() end
+    if GB.RefreshMonitor then GB:RefreshMonitor() end
 end)
 GB:On("PARTY_MEMBERS_CHANGED", function()
     GB:EnsureRaid()
     GB:RefreshRoster(); GB:UpdateAnnounce(); GB:RefreshUI()
+    if GB.CheckNewMembers then GB:CheckNewMembers() end
+    if GB.RefreshMonitor then GB:RefreshMonitor() end
+end)
+GB:On("UNIT_LEVEL", function()
+    if GB.RefreshMonitor then GB:RefreshMonitor() end
 end)

@@ -117,6 +117,9 @@ GB:On("PLAYER_LOGIN", function()
     GB.db.active = false   -- always start inactive on login; you turn it on when recruiting
     GB:Print(("v%s loaded (inactive). /gb opens options; toggle Active when recruiting."):format(GB.version))
     if GB.RefreshRoster then GB:RefreshRoster() end
+    -- Prime "seen members" so people already in your group at login aren't asked.
+    GB._seenMembers = {}
+    for n in pairs(GB.rosterByName or {}) do GB._seenMembers[n] = true end
     if GB.UpdateAnnounce then GB:UpdateAnnounce() end
     if GB.RefreshUI then GB:RefreshUI() end
 
@@ -192,6 +195,9 @@ local function handleSlash(msg)
         GB:Print("  /gb roles          - popup of who is tank / healer")
         GB:Print("  /gb clear          - reset the tracked comp (clear all roles/auras)")
         GB:Print("  /gb events         - toggle event logging (find the leave-instance event)")
+        GB:Print("  /gb levels         - print each member's detected level")
+        GB:Print("  /gb debug          - dry-run panel (shows what actions WOULD do)")
+        GB:Print("  /gb monitor        - live list of players near the autokick level")
         GB:Print("  /gb friend add <name> [role] - reserve a slot for a friend (list/remove/clear)")
         GB:Print("  /gb whitelist add <name>|me - exempt from the sub-60 autokick (list/remove/clear)")
         return
@@ -201,6 +207,10 @@ local function handleSlash(msg)
         GB.db.active = false; GB:Print("master switch", toggle(false)); GB:RefreshUI(); return
     elseif cmd == "levels" then
         GB:DebugLevels(); return
+    elseif cmd == "debug" then
+        GB:ShowDebug(); return
+    elseif cmd == "monitor" then
+        GB:ShowMonitor(); return
     elseif cmd == "vers" or cmd == "version" then
         GB:Print("version |cff33ff99" .. tostring(GB.version) .. "|r")
         return

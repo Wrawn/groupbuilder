@@ -17,5 +17,7 @@ UI.lua
 Applicants.lua
 SetRole.lua
 Whitelist.lua
+Debug.lua
+Monitor.lua
 Options.lua
 Panel.lua
