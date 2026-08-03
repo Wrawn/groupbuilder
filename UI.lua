@@ -78,13 +78,7 @@ local function createUI()
     frame = CreateFrame("Frame", "GroupBuilderFrame", UIParent)
     frame:SetWidth(240)
     frame:SetHeight(250)
-    frame:SetBackdrop({
-        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true, tileSize = 16, edgeSize = 16,
-        insets = { left = 4, right = 4, top = 4, bottom = 4 },
-    })
-    frame:SetBackdropColor(0, 0, 0, 0.85)
+    GB:Skin(frame, 0.55)   -- mostly see-through; only the buttons read as solid/dark
     frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
@@ -100,19 +94,20 @@ local function createUI()
     title:SetText("GroupBuilder")
     frame.title = title
 
-    -- close (X) + minimize buttons, top-right
+    -- minimize on the LEFT, close (X) on the right
     local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", -2, -2)
     close:SetScript("OnClick", function() GB.db.ui.shown = false; GB:RefreshUI() end)
 
     local minBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     minBtn:SetWidth(18); minBtn:SetHeight(18)
-    minBtn:SetPoint("TOPRIGHT", -26, -7)
+    minBtn:SetPoint("TOPLEFT", 6, -7)
     minBtn:SetText("_")
     minBtn:SetScript("OnClick", function()
         GB.db.ui.minimized = not GB.db.ui.minimized
         GB:RefreshUI()
     end)
+    GB:SkinButton(minBtn)
     frame.minBtn = minBtn
 
     -- widgets hidden when minimized
@@ -145,6 +140,7 @@ local function createUI()
                 StaticPopup_Show("GROUPBUILDER_REMOVE_AURA", row.playerName, nil, row.playerName)
             end
         end)
+        GB:SkinButton(x)
         row.x = x
         row:Hide()
         frame.auraRows[i] = row
@@ -176,6 +172,7 @@ local function createUI()
         local b = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
         b:SetWidth(w); b:SetHeight(22); b:SetPoint(anchor, x, y); b:SetText(text)
         b:SetScript("OnClick", function() call(method) end)
+        GB:SkinButton(b)
         frame.fullOnly[#frame.fullOnly + 1] = b
         return b
     end
@@ -201,6 +198,7 @@ end
 
 function GB:RefreshUI()
     if not self.db then return end
+    if self.RefreshMinimap then self:RefreshMinimap() end   -- keep the GB icon's on/off color in sync
     if not frame then
         if not self.db.ui.shown then return end
         createUI()

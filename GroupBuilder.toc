@@ -16,8 +16,8 @@ Leveling.lua
 UI.lua
 Applicants.lua
 SetRole.lua
-Whitelist.lua
 Debug.lua
 Monitor.lua
+PassLead.lua
 Options.lua
 Panel.lua

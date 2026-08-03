@@ -1,43 +1,37 @@
 -- GroupBuilder :: Panel.lua
--- Two extra entry points to the options window:
---   1) a category in Esc -> Interface -> AddOns
---   2) a draggable minimap button
--- Both just open GB:ToggleOptions().
+--   1) the Esc -> Interface -> AddOns -> GroupBuilder category, which holds all the
+--      settings inline (populated by GB:BuildOptions)
+--   2) a draggable minimap button that opens it (left-click) / toggles Active (right-click)
 
 local addonName, GB = ...
 
 -- ---------------------------------------------------------------------------
 --  Interface Options category (Esc -> Interface -> AddOns -> GroupBuilder)
 -- ---------------------------------------------------------------------------
+-- Register one Interface Options category. Children pass the parent's name, which
+-- gives the parent a +/- expander and nests them underneath.
+local function addCategory(name, parentName, builder)
+    local p = CreateFrame("Frame", parentName and nil or "GroupBuilderInterfacePanel", UIParent)
+    p.name = name
+    if parentName then p.parent = parentName end
+    if builder then builder(p) end
+    p.refresh = function() if GB.RefreshOptions then GB:RefreshOptions() end end
+    p.okay = function() end
+    p.cancel = function() end
+    if InterfaceOptions_AddCategory then InterfaceOptions_AddCategory(p) end
+    return p
+end
+
 local function buildInterfacePanel()
-    local panel = CreateFrame("Frame", "GroupBuilderInterfacePanel", UIParent)
-    panel.name = "GroupBuilder"
+    -- Parent node + its sub-pages. Parent must be registered before its children.
+    GB.interfacePanel = addCategory("GroupBuilder", nil, function(p) if GB.BuildLanding then GB:BuildLanding(p) end end)
+    addCategory("Basic Options", "GroupBuilder", function(p) if GB.BuildOptions then GB:BuildOptions(p) end end)
+    addCategory("Auto-Kick Whitelist", "GroupBuilder", function(p) if GB.BuildListPanel then GB:BuildListPanel(p, "whitelist") end end)
+    addCategory("Auto-Inv Blacklist", "GroupBuilder", function(p) if GB.BuildListPanel then GB:BuildListPanel(p, "blacklist") end end)
+    addCategory("Help", "GroupBuilder", function(p) if GB.BuildHelp then GB:BuildHelp(p) end end)
+    addCategory("About", "GroupBuilder", function(p) if GB.BuildAbout then GB:BuildAbout(p) end end)
 
-    local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", 16, -16)
-    title:SetText("GroupBuilder")
-
-    local desc = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    desc:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-    desc:SetWidth(560)
-    desc:SetJustifyH("LEFT")
-    desc:SetText("Builds a leveling raid comp from whispers, keeps an auto-updating "
-        .. "LFM macro, and reforms the group when someone hits max level.")
-
-    local open = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-    open:SetWidth(200); open:SetHeight(24)
-    open:SetPoint("TOPLEFT", desc, "BOTTOMLEFT", 0, -16)
-    open:SetText("Open GroupBuilder Options")
-    open:SetScript("OnClick", function() GB:ToggleOptions() end)
-
-    local hint = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    hint:SetPoint("TOPLEFT", open, "BOTTOMLEFT", 2, -10)
-    hint:SetText("Or type /gb, or click the minimap button.")
-
-    if InterfaceOptions_AddCategory then
-        InterfaceOptions_AddCategory(panel)
-    end
-    GB.interfacePanel = panel
+    if GB.RefreshOptions then GB:RefreshOptions() end   -- prime every widget from the DB
 end
 
 -- ---------------------------------------------------------------------------
@@ -80,7 +74,7 @@ local function buildMinimapButton()
     local label = button:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
     label:SetPoint("CENTER", icon, "CENTER", 0, 0)
     label:SetText("GB")
-    label:SetTextColor(0.2, 1, 0.6)
+    button.label = label   -- recolored red/green by RefreshMinimap based on Active
 
     -- the standard round minimap-button border ring
     local overlay = button:CreateTexture(nil, "OVERLAY")
@@ -96,18 +90,20 @@ local function buildMinimapButton()
             GB.db.active = not GB.db.active
             GB:Print("master switch", GB.db.active and "|cff55ff55on|r" or "|cffff5555off|r")
             if GB.db.active and GB.NotifyActive then GB:NotifyActive() end
-            GB:UpdateAnnounce(); GB:RefreshUI(); GB:RefreshOptions()
+            GB:UpdateAnnounce(); GB:RefreshUI(); GB:RefreshOptions(); GB:RefreshMinimap()
         else
-            GB:ToggleOptions()
+            GB.db.ui.shown = not GB.db.ui.shown   -- left-click toggles the status window
+            GB:RefreshUI()
         end
     end)
 
     button:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         GameTooltip:AddLine("GroupBuilder")
-        GameTooltip:AddLine("Left-click: open options", 1, 1, 1)
+        GameTooltip:AddLine("Left-click: status window", 1, 1, 1)
         GameTooltip:AddLine("Right-click: toggle Active", 1, 1, 1)
         GameTooltip:AddLine("Drag: move around minimap", 1, 1, 1)
+        GameTooltip:AddLine("(/gb for options)", 0.6, 0.6, 0.6)
         GameTooltip:Show()
     end)
     button:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -120,6 +116,13 @@ end
 function GB:RefreshMinimap()
     if not button then return end
     updatePosition()
+    if button.label then
+        if self.db.active then
+            button.label:SetTextColor(0.2, 1, 0.4)      -- green = Active on
+        else
+            button.label:SetTextColor(1, 0.25, 0.25)    -- red = Active off
+        end
+    end
     if self.db.minimap.hide then button:Hide() else button:Show() end
 end
 

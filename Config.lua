@@ -64,6 +64,7 @@ GB.defaults = {
         maxLevel   = 60,
         autoReform = true,   -- kick all & re-invite everyone except the dinger
         announceReform = true,
+        autoLeave = true,    -- after a reform, auto-leave the Manastorm (resets scaling)
     },
 
     -- UI.
@@ -85,6 +86,11 @@ GB.defaults = {
     -- are also exempt automatically. Whitelisted players are still reformed if
     -- they actually hit 60.
     whitelist = {},
+
+    -- Players who should NEVER be invited (ninja, troublemaker, etc). Account-wide
+    -- and permanent. [name] = reason string ("" if none given). Blocks every invite
+    -- path and auto-declines their join whispers.
+    blacklist = {},
 
     -- Auto-mark tanks with raid icons: 1st tank -> circle (2), 2nd -> square (6),
     -- only if they aren't already marked. Needs you to be leader/assist.

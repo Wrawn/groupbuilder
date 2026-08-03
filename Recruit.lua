@@ -131,6 +131,11 @@ end
 GB._gbInvited = GB._gbInvited or {}
 function GB:Invite(name)
     name = self:NormName(name)
+    local reason = self:IsBlacklisted(name)
+    if reason ~= nil then
+        self:Print("|cffff5555skipping " .. name .. "|r — blacklisted" .. (reason ~= "" and (" (" .. reason .. ")") or "") .. ".")
+        return
+    end
     self._gbInvited[name] = GetTime()
     InviteUnit(name)
 end
@@ -366,6 +371,9 @@ GB:On("CHAT_MSG_WHISPER", function(_, msg, author)
     -- otherwise two addon users whisper each other in an infinite loop.
     if msg:find("^GroupBuilder by ") then return end
     local name = GB:NormName(author)
+
+    -- Blacklisted players are ghost-banned: no auto-reply at all, just ignored.
+    if GB:IsBlacklisted(name) ~= nil then return end
 
     -- Failsafe: anyone who missed a reform invite can whisper "reform" for one.
     if msg:lower():find("reform") then

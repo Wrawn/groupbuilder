@@ -49,13 +49,8 @@ end
 
 local function build()
     frame = CreateFrame("Frame", "GroupBuilderMonitor", UIParent)
-    frame:SetWidth(250); frame:SetHeight(200); frame:SetPoint("CENTER", 0, -120)
-    frame:SetBackdrop({
-        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true, tileSize = 16, edgeSize = 16, insets = { left = 4, right = 4, top = 4, bottom = 4 },
-    })
-    frame:SetBackdropColor(0, 0, 0, 0.9); frame:SetFrameStrata("MEDIUM")
+    frame:SetWidth(250); frame:SetHeight(230); frame:SetPoint("CENTER", 0, -120)
+    GB:Skin(frame, 0.92); frame:SetFrameStrata("MEDIUM")
     frame:EnableMouse(true); frame:SetMovable(true); frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving); frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
 
@@ -65,6 +60,12 @@ local function build()
     close:SetPoint("TOPRIGHT", -4, -4); close:SetScript("OnClick", function() frame:Hide() end)
 
     for i = 1, MAXROWS do rows[i] = makeRow(i) end
+
+    local pass = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    pass:SetWidth(190); pass:SetHeight(22); pass:SetPoint("BOTTOM", 0, 12)
+    pass:SetText("Pass Lead & Leave")
+    pass:SetScript("OnClick", function() if GB.PassLeadPrompt then GB:PassLeadPrompt() end end)
+
     GB.monitorFrame = frame
 end
 

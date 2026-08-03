@@ -13,12 +13,7 @@ local textFrame
 local function buildTextFrame()
     local f = CreateFrame("Frame", "GroupBuilderText", UIParent)
     f:SetWidth(440); f:SetHeight(380); f:SetPoint("CENTER", 220, 0)
-    f:SetBackdrop({
-        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true, tileSize = 16, edgeSize = 16, insets = { left = 4, right = 4, top = 4, bottom = 4 },
-    })
-    f:SetBackdropColor(0, 0, 0, 0.95); f:SetFrameStrata("DIALOG")
+    GB:Skin(f, 0.96); f:SetFrameStrata("DIALOG")
     f:EnableMouse(true); f:SetMovable(true); f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", f.StartMoving); f:SetScript("OnDragStop", f.StopMovingOrSizing)
 
@@ -139,12 +134,7 @@ local dbg
 local function buildDebug()
     dbg = CreateFrame("Frame", "GroupBuilderDebug", UIParent)
     dbg:SetWidth(240); dbg:SetHeight(240); dbg:SetPoint("CENTER", -220, 0)
-    dbg:SetBackdrop({
-        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true, tileSize = 16, edgeSize = 16, insets = { left = 4, right = 4, top = 4, bottom = 4 },
-    })
-    dbg:SetBackdropColor(0, 0, 0, 0.92); dbg:SetFrameStrata("DIALOG")
+    GB:Skin(dbg, 0.94); dbg:SetFrameStrata("DIALOG")
     dbg:EnableMouse(true); dbg:SetMovable(true); dbg:RegisterForDrag("LeftButton")
     dbg:SetScript("OnDragStart", dbg.StartMoving); dbg:SetScript("OnDragStop", dbg.StopMovingOrSizing)
 

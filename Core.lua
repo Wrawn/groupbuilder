@@ -39,9 +39,63 @@ end
 function GB:IsWhitelisted(name)
     name = self:NormName(name)
     if not name then return false end
+    if name == self:MyName() then return true end   -- you're always exempt
     if self.db.whitelist and self.db.whitelist[name] then return true end
     if self.db.friends and self.db.friends[name] then return true end
     return false
+end
+
+-- Blacklisted from ever being invited? Returns the reason (a string, maybe "") if so,
+-- otherwise nil. Note "" is truthy in Lua, so `if GB:IsBlacklisted(n) then` still works.
+function GB:IsBlacklisted(name)
+    name = self:NormName(name)
+    if not name then return nil end
+    local bl = self.db.blacklist
+    if bl and bl[name] ~= nil then return bl[name] end
+    return nil
+end
+
+-- Modern flat dark skin for our own windows (thin border, no gold 2008 frame).
+local SKIN_BACKDROP = {
+    bgFile = "Interface\\Buttons\\WHITE8X8",
+    edgeFile = "Interface\\Buttons\\WHITE8X8",
+    edgeSize = 1,
+    insets = { left = 1, right = 1, top = 1, bottom = 1 },
+}
+function GB:Skin(f, alpha)
+    if not (f and f.SetBackdrop) then return end
+    f:SetBackdrop(SKIN_BACKDROP)
+    f:SetBackdropColor(0.05, 0.05, 0.07, alpha or 0.94)
+    f:SetBackdropBorderColor(0.24, 0.24, 0.30, 1)
+end
+
+-- Flatten a UIPanelButtonTemplate button into a dark square button (no gold caps).
+local BUTTON_BACKDROP = {
+    bgFile = "Interface\\Buttons\\WHITE8X8",
+    edgeFile = "Interface\\Buttons\\WHITE8X8",
+    edgeSize = 1,
+    insets = { left = 1, right = 1, top = 1, bottom = 1 },
+}
+local function btnColor(b, hover)
+    if not b.SetBackdropColor then return end
+    if hover then b:SetBackdropColor(0.22, 0.22, 0.28, 1)
+    else b:SetBackdropColor(0.13, 0.13, 0.16, 0.95) end
+end
+function GB:SkinButton(b)
+    if not (b and b.SetBackdrop) then return end
+    for _, getter in ipairs({ "GetNormalTexture", "GetPushedTexture", "GetHighlightTexture", "GetDisabledTexture" }) do
+        local t = b[getter] and b[getter](b)
+        if t and t.SetTexture then t:SetTexture(nil) end
+    end
+    b:SetBackdrop(BUTTON_BACKDROP)
+    btnColor(b, false)
+    b:SetBackdropBorderColor(0.30, 0.30, 0.36, 1)
+    local fs = b.GetFontString and b:GetFontString()
+    if fs then fs:SetTextColor(0.92, 0.92, 0.96) end
+    if b.HookScript then
+        b:HookScript("OnEnter", function(s) btnColor(s, true) end)
+        b:HookScript("OnLeave", function(s) btnColor(s, false) end)
+    end
 end
 
 -- True if you can actually run the group: raid leader/assist, party leader, or
@@ -200,6 +254,9 @@ local function handleSlash(msg)
         GB:Print("  /gb monitor        - live list of players near the autokick level")
         GB:Print("  /gb friend add <name> [role] - reserve a slot for a friend (list/remove/clear)")
         GB:Print("  /gb whitelist add <name>|me - exempt from the sub-60 autokick (list/remove/clear)")
+        GB:Print("  /gb blacklist add <name> [reason] - never invite this player (list/remove/clear)")
+        GB:Print("  /gb pass <name>    - hand raid lead to someone & leave (promotes all to assist)")
+        GB:Print("  /gb leave          - leave the Manastorm (resets scaling)")
         return
     elseif cmd == "on" then
         GB.db.active = true;  GB:Print("master switch", toggle(true)); GB:UpdateAnnounce(); GB:NotifyActive(); GB:RefreshUI(); return
@@ -208,9 +265,23 @@ local function handleSlash(msg)
     elseif cmd == "levels" then
         GB:DebugLevels(); return
     elseif cmd == "debug" then
-        GB:ShowDebug(); return
+        if GB.ShowDebug then GB:ShowDebug() else GB:Print("Debug UI not loaded — fully exit & restart the game client to load new files.") end
+        return
     elseif cmd == "monitor" then
-        GB:ShowMonitor(); return
+        if GB.ShowMonitor then GB:ShowMonitor() else GB:Print("Monitor UI not loaded — fully exit & restart the game client to load new files.") end
+        return
+    elseif cmd == "leave" then
+        -- Manual "leave the Manastorm" (resets scaling). Reform does this automatically
+        -- now; this stays as a manual fallback.
+        if GB.LeaveInstance then GB:LeaveInstance() else GB:Print("Leave not loaded — fully restart the client.") end
+        return
+    elseif cmd == "pass" then
+        local pname, tail = rest:match("^(%S*)%s*(.-)%s*$")
+        if not pname or pname == "" then GB:Print("usage: /gb pass <name> [confirm]"); return end
+        if not GB.PassLead then GB:Print("Pass-lead not loaded — fully restart the game client."); return end
+        if tail:lower() == "confirm" then GB:PassLead(GB:NormName(pname))
+        else GB:ConfirmPassLead(GB:NormName(pname)) end
+        return
     elseif cmd == "vers" or cmd == "version" then
         GB:Print("version |cff33ff99" .. tostring(GB.version) .. "|r")
         return
@@ -368,6 +439,29 @@ local function handleSlash(msg)
             for n in pairs(GB.db.whitelist) do any = true; GB:Print("  " .. n) end
             if not any then GB:Print("  (none). Add: /gb whitelist add <name>  |  add me") end
             GB:Print("|cffaaaaaa(reserved friends are also exempt.)|r")
+        end
+        return
+    elseif cmd == "blacklist" or cmd == "bl" then
+        GB.db.blacklist = GB.db.blacklist or {}
+        local sub, arg = rest:match("^(%S*)%s*(.-)%s*$")
+        sub = (sub or ""):lower()
+        if sub == "add" then
+            local pname, reason = arg:match("^(%S+)%s*(.-)%s*$")
+            if not pname then GB:Print("usage: /gb blacklist add <name> [reason]"); return end
+            pname = GB:NormName(pname); GB.db.blacklist[pname] = reason or ""
+            GB:Print(pname .. " blacklisted — will never be invited" .. (reason ~= "" and (" (" .. reason .. ")") or "") .. ".")
+        elseif sub == "remove" or sub == "rem" or sub == "del" then
+            local pname = arg:match("^(%S+)")
+            pname = pname and GB:NormName(pname)
+            if pname and GB.db.blacklist[pname] ~= nil then GB.db.blacklist[pname] = nil; GB:Print("removed " .. pname .. " from the blacklist.")
+            else GB:Print("that name isn't on the blacklist.") end
+        elseif sub == "clear" then
+            GB.db.blacklist = {}; GB:Print("blacklist cleared.")
+        else
+            GB:Print("auto-invite blacklist (never invited):")
+            local any = false
+            for n, why in pairs(GB.db.blacklist) do any = true; GB:Print("  " .. n .. (why ~= "" and (" |cffaaaaaa- " .. why .. "|r") or "")) end
+            if not any then GB:Print("  (none). Add: /gb blacklist add <name> [reason]") end
         end
         return
     else

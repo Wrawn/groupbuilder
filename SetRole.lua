@@ -11,13 +11,7 @@ local function build()
     frame = CreateFrame("Frame", "GroupBuilderSetRole", UIParent)
     frame:SetWidth(250); frame:SetHeight(180)
     frame:SetPoint("CENTER")
-    frame:SetBackdrop({
-        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true, tileSize = 16, edgeSize = 16,
-        insets = { left = 4, right = 4, top = 4, bottom = 4 },
-    })
-    frame:SetBackdropColor(0, 0, 0, 0.92)
+    GB:Skin(frame, 0.94)
     frame:SetFrameStrata("DIALOG")
     frame:EnableMouse(true); frame:SetMovable(true); frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)

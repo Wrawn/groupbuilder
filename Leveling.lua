@@ -231,6 +231,38 @@ function GB:OnMemberDinged(dinger)
     self:ReformGroup(dinger)
 end
 
+-- Leave the Manastorm (which resets the level-60 mob scaling). Ascension's "Leave
+-- The Manastorm" menu entry pops a confirm dialog whose YES runs the real leave; we
+-- fire that dialog's own accept handler so no menu/clicking is involved.
+-- Tested standalone via /gb leave; once confirmed it folds into Reform (kick, THEN leave).
+local MANASTORM_CONFIRM = "LEAVE_THE_MANASTORM_CONFIRM"
+
+function GB:LeaveInstance()
+    local dlg = StaticPopupDialogs and StaticPopupDialogs[MANASTORM_CONFIRM]
+    if dlg then
+        -- Show the real confirm and auto-click Yes, so the handler gets its proper
+        -- frame/data — identical to you clicking Yes yourself.
+        if StaticPopup_Show then
+            local shown = StaticPopup_Show(MANASTORM_CONFIRM)
+            local btn = shown and shown.GetName and _G[shown:GetName() .. "Button1"]
+            if btn then
+                btn:Click()
+                self:Print("Confirmed 'Leave The Manastorm' — did it port you out?")
+                return true
+            end
+        end
+        if dlg.OnAccept then                          -- fallback: call the handler directly
+            local ok, err = pcall(dlg.OnAccept, dlg)
+            self:Print(ok and "Ran the Manastorm-leave handler — did it port you out?"
+                or ("|cffff5555leave handler error:|r " .. tostring(err)))
+            return ok
+        end
+    end
+    if LFGTeleport then pcall(LFGTeleport, true) end   -- last resort
+    self:Print("|cffff5555Couldn't find the Manastorm leave dialog.|r Are you inside a Manastorm?")
+    return false
+end
+
 -- Reform: raid-warn, whisper everyone "pst reform for a reinvite", store the
 -- reform list, and kick everyone. It does NOT re-invite — you often can't invite
 -- until you leave the Manastorm, so the re-invites are sent later by ReinviteGroup
@@ -294,7 +326,18 @@ function GB:ReformGroup(dinger)
     end
 
     self._reformPending = true   -- auto-reinvite once we leave the instance
-    self:Print(("Kicked & whispered %d member(s). Leave the Manastorm and I'll auto-reinvite (or /gb reinvite)."):format(#keepers))
+
+    -- Auto-leave the Manastorm (only if we're actually inside one), a beat after the
+    -- kick so the warning/whispers/uninvites flush. Loading out fires the re-invites
+    -- automatically (reformLeaveCheck). /gb reinvite + the 'reform' whisper stay as a
+    -- fallback for anyone who doesn't leave right away.
+    local inInstance = IsInInstance and IsInInstance()
+    if self.db.leveling.autoLeave ~= false and inInstance then
+        self:Print(("Kicked %d member(s) — leaving the Manastorm now; re-invites go out once you load out."):format(#keepers))
+        self:After(1.5, function() self:LeaveInstance() end)
+    else
+        self:Print(("Kicked & whispered %d member(s). Leave the Manastorm and I'll auto-reinvite (or /gb reinvite)."):format(#keepers))
+    end
     self:RefreshRoster(); GB:UpdateAnnounce(); GB:RefreshUI()
 end
 

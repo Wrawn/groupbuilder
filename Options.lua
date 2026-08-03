@@ -1,7 +1,7 @@
 -- GroupBuilder :: Options.lua
--- A movable config window opened with /gb. Every setting the slash commands
--- expose is available here as a checkbox / field / cycle button, with a live
--- preview of the LFM line at the bottom.
+-- Every setting the slash commands expose, built into the Blizzard Interface
+-- Options panel (Esc -> Interface -> AddOns -> GroupBuilder) as checkboxes / fields /
+-- cycle buttons, with a live LFM preview. Opened with /gb. Settings apply immediately.
 
 local addonName, GB = ...
 
@@ -38,14 +38,26 @@ local function makeCheck(label, x, y, get, set)
     return cb
 end
 
-local function makeEdit(label, x, y, width, get, set, numeric)
+-- boxOffset: if given, anchor the box a fixed distance right of the label's LEFT edge
+-- (so a column of boxes lines up regardless of label width). Otherwise the box just
+-- follows the end of the label (fine for long, single labels).
+-- InputBoxTemplate anchors its middle fill texture to child textures named
+-- "$parentLeft"/"$parentRight" — so each EditBox MUST have a unique name or the
+-- fill doesn't render (you get a hollow gap). Hence the counter below.
+local editCount = 0
+local function makeEdit(label, x, y, width, get, set, numeric, boxOffset)
     local lbl = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     lbl:SetPoint("TOPLEFT", x, y)
     lbl:SetText(label)
-    local eb = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
+    editCount = editCount + 1
+    local eb = CreateFrame("EditBox", "GroupBuilderOptEdit" .. editCount, frame, "InputBoxTemplate")
     eb:SetAutoFocus(false)
     eb:SetHeight(18); eb:SetWidth(width)
-    eb:SetPoint("LEFT", lbl, "RIGHT", 10, 0)
+    if boxOffset then
+        eb:SetPoint("LEFT", lbl, "LEFT", boxOffset, 0)
+    else
+        eb:SetPoint("LEFT", lbl, "RIGHT", 10, 0)
+    end
     if numeric then
         -- numbers sit centered in a snug box so there's no trailing gap
         eb:SetNumeric(true)
@@ -139,158 +151,133 @@ local SELF_ROLES = { "None", "Tank", "Healer", "DPS" }
 local LABEL_TO_ROLE = { None = nil, Tank = "tank", Healer = "healer", DPS = "dps" }
 local ROLE_TO_LABEL = { tank = "Tank", healer = "Healer", dps = "DPS" }
 
-local function build()
-    frame = CreateFrame("Frame", "GroupBuilderOptions", UIParent)
-    frame:SetWidth(340); frame:SetHeight(660)
-    frame:SetPoint("CENTER")
-    frame:SetBackdrop({
-        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true, tileSize = 16, edgeSize = 16,
-        insets = { left = 4, right = 4, top = 4, bottom = 4 },
-    })
-    frame:SetBackdropColor(0, 0, 0, 0.92)
-    frame:SetFrameStrata("DIALOG")
-    frame:EnableMouse(true)
-    frame:SetMovable(true)
-    frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+-- Build every setting straight into the Blizzard Interface Options panel (passed in
+-- by Panel.lua). Two columns so it all fits without a scrollbar. Settings apply live.
+function GB:BuildOptions(parent)
+    frame = parent
 
-    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOP", 0, -12)
-    title:SetText("GroupBuilder")
+    local L1, L2 = 16, 330       -- two column x-origins
+    local y1, y2 = -66, -66      -- per-column layout cursors (advance downward)
+    local function nl1(s) local c = y1; y1 = y1 - (s or 24); return c end
+    local function nl2(s) local c = y2; y2 = y2 - (s or 24); return c end
+    local function gap1(s) y1 = y1 - (s or 8) end
+    local function gap2(s) y2 = y2 - (s or 8) end
 
-    local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -4, -4)
-    close:SetScript("OnClick", function() frame:Hide() end)
-
-    local L = 20                 -- left column x
-    local y = -40                -- layout cursor (advanced downward)
-    local function nl(step) local cur = y; y = y - (step or 24); return cur end
-    local function gap(step) y = y - (step or 8) end
-
-    makeCheck("|cff33ff99Active|r (auto reply / invite / reform)", L, nl(28),
+    -- master switch, just under the panel title
+    makeCheck("|cff33ff99Active|r (auto reply / invite / reform)", L1, -42,
         function() return GB.db.active end,
         function(v) GB.db.active = v; if v and GB.NotifyActive then GB:NotifyActive() end end)
 
-    -- ---- You ----
-    makeHeader("You (your own slot)", L, nl(22))
-    makeCycle("My role", L, nl(26), 80, SELF_ROLES,
+    -- ===== Column 1 =====
+    makeHeader("You (your own slot)", L1, nl1(22))
+    makeCycle("My role", L1, nl1(26), 80, SELF_ROLES,
         function() local c = GB:GetSelfClaim(); return (c and ROLE_TO_LABEL[c.role]) or "None" end,
         function(v) GB:SetSelfField("role", LABEL_TO_ROLE[v]) end)
-    makeCheck("I am bringing an aura", L, nl(22),
+    makeCheck("I am bringing an aura", L1, nl1(22),
         function() local c = GB:GetSelfClaim(); return c and c.aura end,
         function(v) GB:SetSelfField("aura", v or nil) end)
 
-    -- ---- Target comp ----
-    gap()
-    makeHeader("Target comp", L, nl(22))
-    local compRow = nl(22)
-    makeEdit("Tanks", L, compRow, 32,
+    gap1()
+    makeHeader("Target comp", L1, nl1(22))
+    -- 2x2 grid: labels at a fixed x, boxes at a fixed x, so all four align.
+    local BOX = 58           -- box sits this far right of each label's left edge (clears "Healers")
+    local r1 = nl1(24)
+    makeEdit("Tanks", L1, r1, 38,
         function() return GB.db.comp.tanks end,
-        function(v) GB.db.comp.tanks = math.max(0, math.floor(v)); GB.db.comp.size = GB.db.comp.tanks + GB.db.comp.healers + GB.db.comp.dps end, true)
-    makeEdit("Healers", L + 140, compRow, 32,
+        function(v) GB.db.comp.tanks = math.max(0, math.floor(v)); GB.db.comp.size = GB.db.comp.tanks + GB.db.comp.healers + GB.db.comp.dps end, true, BOX)
+    makeEdit("Healers", L1 + 150, r1, 38,
         function() return GB.db.comp.healers end,
-        function(v) GB.db.comp.healers = math.max(0, math.floor(v)); GB.db.comp.size = GB.db.comp.tanks + GB.db.comp.healers + GB.db.comp.dps end, true)
-    local compRow2 = nl(24)
-    makeEdit("DPS", L, compRow2, 32,
+        function(v) GB.db.comp.healers = math.max(0, math.floor(v)); GB.db.comp.size = GB.db.comp.tanks + GB.db.comp.healers + GB.db.comp.dps end, true, BOX)
+    local r2 = nl1(26)
+    makeEdit("DPS", L1, r2, 38,
         function() return GB.db.comp.dps end,
-        function(v) GB.db.comp.dps = math.max(0, math.floor(v)); GB.db.comp.size = GB.db.comp.tanks + GB.db.comp.healers + GB.db.comp.dps end, true)
-    makeEdit("Auras", L + 140, compRow2, 32,
+        function(v) GB.db.comp.dps = math.max(0, math.floor(v)); GB.db.comp.size = GB.db.comp.tanks + GB.db.comp.healers + GB.db.comp.dps end, true, BOX)
+    makeEdit("Auras", L1 + 150, r2, 38,
         function() return GB.db.comp.auras end,
-        function(v) GB.db.comp.auras = math.max(0, math.floor(v)) end, true)
+        function(v) GB.db.comp.auras = math.max(0, math.floor(v)) end, true, BOX)
 
-    -- ---- Requirements ----
-    gap()
-    makeHeader("Require heirlooms? (per role)", L, nl(22))
-    local loomRow = nl(22)
-    makeCheck("Tanks", L, loomRow,
-        function() return GB:RoleLooms("tank") end,
-        function(v) GB.db.requireLooms.tank = v end)
-    makeCheck("Healers", L + 90, loomRow,
-        function() return GB:RoleLooms("healer") end,
-        function(v) GB.db.requireLooms.healer = v end)
-    makeCheck("DPS", L + 200, loomRow,
-        function() return GB:RoleLooms("dps") end,
-        function(v) GB.db.requireLooms.dps = v end)
-
-    -- ---- Whisper options ----
-    gap()
-    makeHeader("Whisper options (auto-response)", L, nl(22))
-    makeCheck("Auto-reply to whispers", L, nl(22),
+    gap1()
+    makeHeader("Whisper options (auto-response)", L1, nl1(22))
+    makeCheck("Auto-reply to whispers", L1, nl1(22),
         function() return GB.db.recruit.autoReply end,
         function(v) GB.db.recruit.autoReply = v end)
-    makeCheck("Auto-invite matching applicants", L, nl(22),
+    makeCheck("Auto-invite matching applicants", L1, nl1(22),
         function() return GB.db.recruit.autoInvite end,
         function(v) GB.db.recruit.autoInvite = v end)
-    makeCheck("Manual invite (pick from Applicants list)", L, nl(22),
+    makeCheck("Manual invite (pick from Applicants list)", L1, nl1(22),
         function() return GB.db.recruit.manualInvite end,
         function(v) GB.db.recruit.manualInvite = v; if GB.RefreshApplicants then GB:RefreshApplicants() end end)
-    makeCheck("Ask if they have an aura?", L, nl(22),
+    makeCheck("Ask if they have an aura?", L1, nl1(22),
         function() return GB.db.recruit.askAura end,
         function(v) GB.db.recruit.askAura = v end)
-    makeCheck("Ask if they have heirlooms?", L, nl(22),
+    makeCheck("Ask if they have heirlooms?", L1, nl1(22),
         function() return GB.db.recruit.askLooms end,
         function(v) GB.db.recruit.askLooms = v end)
-    makeCheck("Ask manually-invited members for role/aura", L, nl(22),
+    makeCheck("Ask manually-invited members for role/aura", L1, nl1(22),
         function() return GB.db.recruit.askNewMembers end,
         function(v) GB.db.recruit.askNewMembers = v end)
-    makeEdit("Reply cooldown (sec)", L, nl(24), 32,
+    makeEdit("Reply cooldown (sec)", L1, nl1(24), 32,
         function() return GB.db.recruit.cooldown end,
         function(v) GB.db.recruit.cooldown = math.max(0, math.floor(v)) end, true)
-    makeEdit("Reserve dps spots (for aura dps)", L, nl(24), 32,
+    makeEdit("Reserve dps spots (for aura dps)", L1, nl1(24), 32,
         function() return GB.db.recruit.reserveDps end,
         function(v) GB.db.recruit.reserveDps = math.max(0, math.floor(v)) end, true)
 
-    -- ---- Announce ----
-    gap()
-    makeHeader("Announce", L, nl(22))
-    makeChannelDropdown("Channel", L, nl(30))
+    -- ===== Column 2 =====
+    makeHeader("Require heirlooms? (per role)", L2, nl2(22))
+    local lr = nl2(22)
+    makeCheck("Tanks", L2, lr,
+        function() return GB:RoleLooms("tank") end,
+        function(v) GB.db.requireLooms.tank = v end)
+    makeCheck("Healers", L2 + 90, lr,
+        function() return GB:RoleLooms("healer") end,
+        function(v) GB.db.requireLooms.healer = v end)
+    makeCheck("DPS", L2 + 200, lr,
+        function() return GB:RoleLooms("dps") end,
+        function(v) GB.db.requireLooms.dps = v end)
 
-    -- ---- Leveling ----
-    gap()
-    makeHeader("Anti-scaling (reform on max level)", L, nl(22))
-    makeCheck("Enable?", L, nl(24),
+    gap2()
+    makeHeader("Announce", L2, nl2(22))
+    makeChannelDropdown("Channel", L2, nl2(30))
+
+    gap2()
+    makeHeader("Anti-scaling (reform on max level)", L2, nl2(22))
+    makeCheck("Enable?", L2, nl2(24),
         function() return GB.db.leveling.enabled end,
         function(v) GB.db.leveling.enabled = v end)
-    makeEdit("Kick at level (60 = reform only)", L, nl(24), 32,
+    makeEdit("Kick at level (60 = reform only)", L2, nl2(24), 32,
         function() return GB.db.leveling.maxLevel end,
         function(v) GB.db.leveling.maxLevel = math.max(1, math.floor(v)) end, true)
-    makeButton("Whitelist (exempt from autokick)", L, nl(26), 220, function()
-        if GB.ShowWhitelist then GB:ShowWhitelist() end
-    end)
+    makeCheck("Auto-leave the Manastorm after reform", L2, nl2(22),
+        function() return GB.db.leveling.autoLeave end,
+        function(v) GB.db.leveling.autoLeave = v end)
+    local wlhint = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    wlhint:SetPoint("TOPLEFT", L2, nl2(18)); wlhint:SetWidth(280); wlhint:SetJustifyH("LEFT")
+    wlhint:SetText("Whitelist / blacklist are their own tabs on the left.")
 
-    -- ---- Interface ----
-    gap()
-    makeHeader("Interface", L, nl(22))
-    makeCheck("Auto-mark tanks (circle / square)", L, nl(22),
+    gap2()
+    makeHeader("Interface", L2, nl2(22))
+    makeCheck("Auto-mark tanks (circle / square)", L2, nl2(22),
         function() return GB.db.markTanks end,
         function(v) GB.db.markTanks = v; if v and GB.MarkTanks then GB:MarkTanks() end end)
-    makeCheck("Hide minimap button", L, nl(22),
+    makeCheck("Hide minimap button", L2, nl2(22),
         function() return GB.db.minimap.hide end,
         function(v) GB.db.minimap.hide = v; if GB.RefreshMinimap then GB:RefreshMinimap() end end)
 
-    -- ---- live preview ----
-    gap()
-    makeHeader("LFM preview", L, nl(20))
+    gap2()
+    makeHeader("LFM preview", L2, nl2(20))
     preview = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    preview:SetPoint("TOPLEFT", L, nl(44))
-    preview:SetWidth(frame:GetWidth() - 40)
-    preview:SetJustifyH("LEFT")
-    preview:SetJustifyV("TOP")
-    preview:SetHeight(40)
+    preview:SetPoint("TOPLEFT", L2, nl2(44))
+    preview:SetWidth(280); preview:SetJustifyH("LEFT"); preview:SetJustifyV("TOP"); preview:SetHeight(40)
 
-    -- ---- action buttons ----
-    local btnRow = nl(28)
-    makeButton("Announce", L, btnRow, 90, function() GB:AnnounceNow() end)
-    makeButton("Reform", L + 100, btnRow, 90, function() GB:ReformGroup(nil) end)
-    makeButton("Status window", L + 200, btnRow, 100, function()
+    local br = nl2(28)
+    makeButton("Announce", L2, br, 80, function() GB:AnnounceNow() end)
+    makeButton("Reform", L2 + 88, br, 80, function() GB:ReformGroup(nil) end)
+    makeButton("Status window", L2 + 176, br, 100, function()
         GB.db.ui.shown = not GB.db.ui.shown; GB:RefreshUI()
     end)
 
-    -- size the window to fit the content
-    frame:SetHeight(-y + 20)
+    GB:RefreshOptions()   -- prime widgets from the DB
 end
 
 -- Sync every widget + the preview from the current DB.
@@ -302,13 +289,182 @@ function GB:RefreshOptions()
     end
 end
 
--- Open/close the window (bound to /gb).
+-- Open (or close) the Blizzard Interface Options to the GroupBuilder category.
+-- Bound to /gb and the minimap button's left-click.
 function GB:ToggleOptions()
-    if not frame then build() end
-    if frame:IsShown() then
-        frame:Hide()
-    else
-        GB:RefreshOptions()
-        frame:Show()
+    if not self.interfacePanel then return end
+    if InterfaceOptionsFrame and InterfaceOptionsFrame:IsShown() then
+        InterfaceOptionsFrame:Hide()
+        return
     end
+    if InterfaceOptionsFrame_OpenToCategory then
+        -- called twice on purpose: a long-standing Blizzard quirk means the first
+        -- call can land on the wrong category.
+        InterfaceOptionsFrame_OpenToCategory(self.interfacePanel)
+        InterfaceOptionsFrame_OpenToCategory(self.interfacePanel)
+    end
+end
+
+-- ---------------------------------------------------------------------------
+--  Sub-panels (registered as children of the GroupBuilder category by Panel.lua)
+-- ---------------------------------------------------------------------------
+local function panelTitle(panel, text, sub)
+    local t = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    t:SetPoint("TOPLEFT", 16, -16); t:SetText(text)
+    if sub then
+        local d = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        d:SetPoint("TOPLEFT", 16, -42); d:SetWidth(560); d:SetJustifyH("LEFT"); d:SetText(sub)
+    end
+    return t
+end
+
+-- The landing page (the "GroupBuilder" parent node).
+function GB:BuildLanding(panel)
+    frame = panel
+    panelTitle(panel, "GroupBuilder",
+        "Builds a leveling raid comp from whispers, keeps an auto-updating LFM macro, "
+        .. "and reforms the group when someone hits max level.")
+
+    makeCheck("|cff33ff99Active|r  (master switch: auto reply / invite / reform)", 16, -74,
+        function() return GB.db.active end,
+        function(v) GB.db.active = v; if v and GB.NotifyActive then GB:NotifyActive() end end)
+
+    local hint = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    hint:SetPoint("TOPLEFT", 16, -104); hint:SetWidth(560); hint:SetJustifyH("LEFT")
+    hint:SetText("Expand the (+) on the left for Basic Options, Auto-Kick Whitelist, "
+        .. "Auto-Inv Blacklist, Help and About.  Type /gb to open this anytime.")
+end
+
+-- Whitelist / blacklist manager. which = "whitelist" | "blacklist".
+local MAXLISTROWS = 14
+function GB:BuildListPanel(panel, which)
+    frame = panel
+    local isBlack = (which == "blacklist")
+    panelTitle(panel, isBlack and "Auto-Inv Blacklist" or "Auto-Kick Whitelist",
+        isBlack and "Players here are NEVER invited (silent ghost-ban — they get no auto-reply)."
+            or "Players here are exempt from the sub-60 autokick. You and reserved friends are always exempt.")
+
+    local nameLbl = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    nameLbl:SetPoint("TOPLEFT", 20, -62); nameLbl:SetText("name")
+    local name = CreateFrame("EditBox", "GroupBuilder" .. which .. "Name", panel, "InputBoxTemplate")
+    name:SetAutoFocus(false); name:SetHeight(18); name:SetWidth(120)
+    name:SetPoint("TOPLEFT", 22, -76)
+
+    local reason
+    if isBlack then
+        local rl = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        rl:SetPoint("TOPLEFT", 200, -62); rl:SetText("reason (optional)")
+        reason = CreateFrame("EditBox", "GroupBuilderBlacklistReason", panel, "InputBoxTemplate")
+        reason:SetAutoFocus(false); reason:SetHeight(18); reason:SetWidth(180)
+        reason:SetPoint("TOPLEFT", 202, -76)
+    end
+
+    local function addEntry()
+        local n = name:GetText()
+        if not n or n:gsub("%s", "") == "" then return end
+        n = GB:NormName(n)
+        GB.db.whitelist = GB.db.whitelist or {}; GB.db.blacklist = GB.db.blacklist or {}
+        if isBlack then GB.db.blacklist[n] = (reason and reason:GetText()) or "" else GB.db.whitelist[n] = true end
+        name:SetText(""); name:ClearFocus()
+        if reason then reason:SetText(""); reason:ClearFocus() end
+        GB:RefreshOptions()
+    end
+    name:SetScript("OnEnterPressed", addEntry)
+    if reason then reason:SetScript("OnEnterPressed", addEntry) end
+
+    local add = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    add:SetHeight(20); add:SetWidth(46); add:SetText("Add")
+    add:SetPoint("LEFT", (reason or name), "RIGHT", 10, 0)
+    add:SetScript("OnClick", addEntry)
+
+    local header = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    header:SetPoint("TOPLEFT", 20, -108); header:SetText(isBlack and "|cffffcc00Blacklisted:|r" or "|cffffcc00Whitelisted:|r")
+
+    local rows = {}
+    for i = 1, MAXLISTROWS do
+        local row = CreateFrame("Frame", nil, panel)
+        row:SetWidth(540); row:SetHeight(16)
+        if i == 1 then row:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -6)
+        else row:SetPoint("TOPLEFT", rows[i - 1], "BOTTOMLEFT", 0, -2) end
+        local fs = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        fs:SetPoint("LEFT", 2, 0); fs:SetWidth(500); fs:SetJustifyH("LEFT")
+        row.text = fs
+        local x = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+        x:SetWidth(18); x:SetHeight(16); x:SetPoint("LEFT", 508, 0); x:SetText("x")
+        x:SetScript("OnClick", function()
+            if not row.name then return end
+            if isBlack then GB.db.blacklist[row.name] = nil else GB.db.whitelist[row.name] = nil end
+            GB:RefreshOptions()
+        end)
+        row.x = x
+        row:Hide(); rows[i] = row
+    end
+
+    refreshers[#refreshers + 1] = function()
+        local src = isBlack and (GB.db.blacklist or {}) or (GB.db.whitelist or {})
+        local list = {}
+        for n in pairs(src) do list[#list + 1] = n end
+        table.sort(list)
+        for i = 1, MAXLISTROWS do
+            local row, nm = rows[i], list[i]
+            if nm then
+                if isBlack then
+                    local why = src[nm]
+                    row.text:SetText(nm .. (why ~= "" and ("   |cffaaaaaa- " .. why .. "|r") or ""))
+                else
+                    row.text:SetText(nm)
+                end
+                row.name = nm; row.x:Show(); row:Show()
+            else
+                row.name = nil; row:Hide()
+            end
+        end
+        if #list == 0 then
+            rows[1].text:SetText("|cff888888(none yet — add a name above)|r"); rows[1].name = nil; rows[1].x:Hide(); rows[1]:Show()
+        end
+    end
+end
+
+-- Help: the available slash commands.
+function GB:BuildHelp(panel)
+    panelTitle(panel, "GroupBuilder — Help", "Chat commands (type /gb help in-game for the full list):")
+    local lines = {
+        "|cffffd200/gb|r  — open these options",
+        "|cffffd200/gb on|r / |cffffd200off|r  — master switch (auto reply / invite / reform)",
+        "|cffffd200/gb say|r (or the GB_LFM macro)  — post the LFM line to your channel",
+        "|cffffd200/gb comp T H D A|r  — set target comp, e.g. /gb comp 3 2 10 3",
+        "|cffffd200/gb reform|r  — kick everyone, leave the Manastorm, re-invite on load-out",
+        "|cffffd200/gb reinvite|r  — manually send the reform re-invites",
+        "|cffffd200/gb leave|r  — leave the Manastorm now (resets scaling)",
+        "|cffffd200/gb pass <name>|r  — hand lead to someone & leave (everyone made assist)",
+        "|cffffd200/gb roles|r  — popup of who is tank / healer",
+        "|cffffd200/gb aura check|r  — poll aura coverage, PM anyone missing role/aura",
+        "|cffffd200/gb clear|r  — reset the tracked comp",
+        "|cffffd200/gb whitelist add <name>|me|r  — exempt from the sub-60 autokick",
+        "|cffffd200/gb blacklist add <name> [reason]|r  — never invite (silent ghost-ban)",
+        "|cffffd200/gb debug|r  — dry-run panel (shows what actions WOULD do)",
+        "|cffffd200/gb monitor|r  — live list of players near the autokick level",
+        "|cffffd200/gb levels|r  — print each member's detected level",
+    }
+    local body = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    body:SetPoint("TOPLEFT", 20, -70); body:SetWidth(560); body:SetJustifyH("LEFT"); body:SetJustifyV("TOP")
+    body:SetText(table.concat(lines, "\n"))
+    body:SetSpacing(3)
+end
+
+-- About: authorship & thanks.
+function GB:BuildAbout(panel)
+    panelTitle(panel, "GroupBuilder — About")
+    local function line(y, label, value, valueColor)
+        local l = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        l:SetPoint("TOPLEFT", 24, y); l:SetWidth(110); l:SetJustifyH("RIGHT"); l:SetText(label)
+        l:SetTextColor(1, 0.82, 0)
+        local v = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        v:SetPoint("TOPLEFT", 145, y); v:SetWidth(430); v:SetJustifyH("LEFT"); v:SetText(value)
+        if valueColor then v:SetTextColor(unpack(valueColor)) end
+        return v
+    end
+    line(-64, "Version", (GB.version or "dev"))
+    line(-84, "Author", "Aol - Darkmoon")
+    line(-114, "Special thanks", "Elitist Jerks, Qinan, and Schweizerhof for testing.")
 end

@@ -10,6 +10,37 @@ section here.
 
 ## [Unreleased]
 ### Added
+- **Auto-Inv Blacklist** — permanently block players from ever being invited, with an
+  optional reason. It's a **silent ghost-ban**: blacklisted players get no auto-reply at
+  all, and every invite path skips them. Manage it in its own options tab or with
+  `/gb blacklist add <name> [reason]` (list / remove / clear).
+- The GroupBuilder options now have an **expandable (+) menu** with sub-tabs: **Basic
+  Options**, **Auto-Kick Whitelist**, **Auto-Inv Blacklist**, **Help** (all the slash
+  commands), and **About**.
+
+### Changed
+- **Options now live in the standard Interface panel** (Esc → Interface → AddOns →
+  GroupBuilder) instead of a separate pop-up window. Applied live. `/gb` opens it.
+- **The whitelist moved from a pop-up button into its own options tab** (Auto-Kick
+  Whitelist). The `/gb whitelist` commands are unchanged.
+- **Fresh, flatter look** — the status window and the debug/monitor/applicant/set-role
+  pop-ups now use a modern dark panel with a thin border instead of the old gold frame.
+- **Minimap button:** left-click now opens the **status window** (options moved to
+  `/gb`); the **"GB" turns green when Active is on, red when off** at a glance.
+
+### Added
+- **Reform now auto-leaves the Manastorm.** After it kicks the group, Reform teleports
+  you out (which resets the level-60 scaling) — then the re-invites fire automatically
+  as soon as you load out, so you no longer click Reform *and* Reinvite. **Reinvite**
+  (button, `/gb reinvite`, and the "pst reform" whisper) stays as a fallback for anyone
+  who doesn't leave right away. There's a new **`/gb leave`** manual command too, and an
+  **autoLeave** toggle. (Only fires when you're actually inside a Manastorm.)
+- **Pass Lead & Leave** — a button on the `/gb monitor` window (and `/gb pass <name>`)
+  that hands the raid off and leaves. It first promotes **everyone** to assist (so an
+  AFK new leader can't strand the group), passes lead to the player you pick, and
+  whispers them a plain **Tanks / Healers / Auras** summary (no addon jargon — they
+  don't need GroupBuilder; you're left out of the list since you're leaving). Confirms
+  first, and only the current leader can trigger it.
 - **`/gb debug`** — a dry-run panel. Buttons for Reinvite / Reform / Clear Comp / Set
   Role / Autokick-state each show what GB *would* do (who it'd invite/kick and why, the
   live per-player autokick table) in a copy-pasteable window. Nothing is performed.
