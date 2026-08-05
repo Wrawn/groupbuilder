@@ -201,8 +201,8 @@ function GB:AutoKick(name)
     local role = self.claims[name] and self.claims[name].role
     self:Reply(name, ("%s: thanks for coming! I'm removing you now you've hit %d, so you don't scale the mobs to 60 for the rest of the group. GG — whisper me for a re-invite once you've rerolled!"):format(
         self:Tag(), self.db.leveling.maxLevel or 59))
-    local entry = self.rosterByName[name]
-    UninviteUnit(entry and entry.unit or name)
+    -- 3.3.5 UninviteUnit takes the player NAME (not a "raidN" unit token).
+    UninviteUnit(name)
     self:Print("|cffffcc00" .. name .. "|r hit " .. (self.db.leveling.maxLevel or 59) .. " — auto-kicked (not whitelisted).")
 
     -- Private on-screen alert if we lost a tank or healer.
@@ -309,12 +309,14 @@ function GB:ReformGroup(dinger)
     --    LeaveParty() to fully dissolve. Fallback: uninvite by name, dinger first.
     local usedFast = false
     if GetNumRaidMembers() > 0 and LeaveParty then
-        local n = (GetNumGroupMembers and GetNumGroupMembers()) or GetNumRaidMembers()
-        for i = 1, n do
-            local u = "raid" .. i
-            local uname = UnitName(u)
-            if uname and GB:NormName(uname) ~= me then UninviteUnit(u) end
+        -- Snapshot names first, THEN uninvite (by name — 3.3.5), so removing one
+        -- can't shift the roster and make us skip the next.
+        local names = {}
+        for i = 1, GetNumRaidMembers() do
+            local uname = UnitName("raid" .. i)
+            if uname and GB:NormName(uname) ~= me then names[#names + 1] = uname end
         end
+        for _, uname in ipairs(names) do UninviteUnit(uname) end
         LeaveParty()
         usedFast = true
     end

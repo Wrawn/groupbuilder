@@ -56,7 +56,9 @@ function GB:AnnounceNeeds(status)
 
     if roleStr ~= "" then
         if status.auraRequired then return roleStr .. " + aura" end
-        if status.auraNeed > 0 then return roleStr .. " (aura welcome)" end
+        if status.auraNeed > 0 then
+            return roleStr .. (" (auras %d/%d)"):format(status.auraHave or 0, status.comp.auras or 0)
+        end
         return roleStr .. covered
     else
         -- roles full; only aura coverage missing

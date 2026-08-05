@@ -48,25 +48,7 @@ function GB:ConfirmClearComp()
 end
 
 -- Roles popup (who is tank / healer).
-StaticPopupDialogs["GROUPBUILDER_ROLES"] = {
-    text = "%s",
-    button1 = OKAY,
-    timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
-}
-function GB:ShowRoles()
-    self:RefreshRoster()
-    local tanks, heals = {}, {}
-    for _, m in ipairs(self.roster) do
-        local c = self.claims[m.name]
-        local r = c and c.role
-        if r == "tank" then tanks[#tanks + 1] = m.name
-        elseif r == "healer" then heals[#heals + 1] = m.name end
-    end
-    local t = #tanks > 0 and table.concat(tanks, ", ") or "-"
-    local h = #heals > 0 and table.concat(heals, ", ") or "-"
-    StaticPopup_Show("GROUPBUILDER_ROLES",
-        ("|cffc79c6eTanks (%d):|r %s\n\n|cff40c7ebHealers (%d):|r %s"):format(#tanks, t, #heals, h))
-end
+-- GB:ShowRoles() is the editable roster table, defined in SetRole.lua.
 
 local function savePoint()
     if not (frame and GB.db) then return end
@@ -180,10 +162,9 @@ local function createUI()
     -- button grid
     btn("Reform", 104, 12, 92, "BOTTOMLEFT", "ConfirmReform")
     btn("Reinvite", 104, -12, 92, "BOTTOMRIGHT", "ReinviteGroup")
-    btn("Show Roles", 104, 12, 64, "BOTTOMLEFT", "ShowRoles")
-    btn("Set Role / Aura", 104, -12, 64, "BOTTOMRIGHT", "ShowSetRole")
-    btn("Role / Aura Check", 104, 12, 36, "BOTTOMLEFT", "AuraCheck")
-    btn("Clear Comp", 104, -12, 36, "BOTTOMRIGHT", "ConfirmClearComp")
+    btn("Edit Roles", 104, 12, 64, "BOTTOMLEFT", "ShowRoles")
+    btn("Role / Aura Check", 104, -12, 64, "BOTTOMRIGHT", "AuraCheck")
+    btn("Clear Comp", 104, 12, 36, "BOTTOMLEFT", "ConfirmClearComp")
 
     -- restore position
     local p = GB.db.ui.point

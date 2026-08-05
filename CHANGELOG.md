@@ -9,7 +9,17 @@ the new version + date. The GitHub release notes are generated from the matching
 section here.
 
 ## [Unreleased]
+### Fixed
+- **Sub-60 autokick now actually removes the player** (before, it only sent the
+  thanks-for-coming whisper). It was passing a `raidN` unit token to the kick, but on
+  3.3.5 the kick needs the player's **name** — fixed here and in the reform kick. Added
+  `/gb ktest` to verify kicking in isolation.
+
 ### Added
+- **Editable roster table** (`/gb roles` or the status "Edit Roles" button) — a live list
+  of everyone in your group with **Name / Role / Aura** columns, each row with dropdowns
+  to set a player's role and toggle their aura Yes/No. Replaces the old "Set Role / Aura"
+  pop-up (that button is gone) and the read-only roles popup.
 - **Auto-Inv Blacklist** — permanently block players from ever being invited, with an
   optional reason. It's a **silent ghost-ban**: blacklisted players get no auto-reply at
   all, and every invite path skips them. Manage it in its own options tab or with
@@ -19,6 +29,9 @@ section here.
   commands), and **About**.
 
 ### Changed
+- The LFM line now shows **`(auras x/3)`** (how many auras you have vs need) instead of
+  "(aura welcome)" — since auras aren't really "welcome" until you're covered. The
+  "— all auras covered" message stays for when every group has one.
 - **Options now live in the standard Interface panel** (Esc → Interface → AddOns →
   GroupBuilder) instead of a separate pop-up window. Applied live. `/gb` opens it.
 - **The whitelist moved from a pop-up button into its own options tab** (Auto-Kick

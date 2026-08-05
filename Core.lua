@@ -275,6 +275,26 @@ local function handleSlash(msg)
         -- now; this stays as a manual fallback.
         if GB.LeaveInstance then GB:LeaveInstance() else GB:Print("Leave not loaded — fully restart the client.") end
         return
+    elseif cmd == "ktest" then
+        -- Bare kick test: uninvite the one other group member by name. No level /
+        -- whitelist / enabled checks — just verifying UninviteUnit works.
+        local me = GB:MyName()
+        local target
+        if GetNumRaidMembers() > 0 then
+            for i = 1, GetNumRaidMembers() do
+                local n = UnitName("raid" .. i)
+                if n and GB:NormName(n) ~= me then target = n; break end
+            end
+        elseif GetNumPartyMembers() > 0 then
+            for i = 1, GetNumPartyMembers() do
+                local n = UnitName("party" .. i)
+                if n then target = n; break end
+            end
+        end
+        if not target then GB:Print("ktest: no other group member to kick."); return end
+        GB:Print("ktest: kicking |cffffcc00" .. target .. "|r via UninviteUnit(\"" .. target .. "\")...")
+        UninviteUnit(target)
+        return
     elseif cmd == "pass" then
         local pname, tail = rest:match("^(%S*)%s*(.-)%s*$")
         if not pname or pname == "" then GB:Print("usage: /gb pass <name> [confirm]"); return end
