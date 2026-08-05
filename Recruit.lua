@@ -256,6 +256,7 @@ local function applyReply(name, parsed)
     if parsed.looms then c.looms = true end
     if not next(c) then return false end
     GB:SetClaim(name, c)
+    if c.aura == true and GB.MaybeAutoSort then GB:MaybeAutoSort() end   -- keep 1 aura/group
     return true, c
 end
 

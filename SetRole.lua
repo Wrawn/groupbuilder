@@ -24,6 +24,7 @@ end
 function GB:EditAura(name, aura)
     self:SetClaim(name, { aura = aura, source = "manual override" })
     self:UpdateAnnounce(); self:RefreshUI(); self:RefreshRosterEditor()
+    if aura == true and self.MaybeAutoSort then self:MaybeAutoSort() end
 end
 
 local function makeRow(i)

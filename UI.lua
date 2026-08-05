@@ -58,7 +58,7 @@ end
 
 local function createUI()
     frame = CreateFrame("Frame", "GroupBuilderFrame", UIParent)
-    frame:SetWidth(240)
+    frame:SetWidth(GB.db.ui.width or 240)
     frame:SetHeight(250)
     GB:Skin(frame, 0.55)   -- mostly see-through; only the buttons read as solid/dark
     frame:SetMovable(true)
@@ -76,11 +76,7 @@ local function createUI()
     title:SetText("GroupBuilder")
     frame.title = title
 
-    -- minimize on the LEFT, close (X) on the right
-    local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -2, -2)
-    close:SetScript("OnClick", function() GB.db.ui.shown = false; GB:RefreshUI() end)
-
+    -- minimize on the LEFT, close (X) on the right — matching square buttons.
     local minBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     minBtn:SetWidth(18); minBtn:SetHeight(18)
     minBtn:SetPoint("TOPLEFT", 6, -7)
@@ -91,6 +87,13 @@ local function createUI()
     end)
     GB:SkinButton(minBtn)
     frame.minBtn = minBtn
+
+    local close = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    close:SetWidth(18); close:SetHeight(18)
+    close:SetPoint("TOPRIGHT", -6, -7)
+    close:SetText("X")
+    close:SetScript("OnClick", function() GB.db.ui.shown = false; GB:RefreshUI() end)
+    GB:SkinButton(close, true)   -- muted red, white X
 
     -- widgets hidden when minimized
     frame.fullOnly = {}
@@ -166,6 +169,7 @@ local function createUI()
     btn("Role / Aura Check", 104, -12, 64, "BOTTOMRIGHT", "AuraCheck")
     btn("Clear Comp", 104, 12, 36, "BOTTOMLEFT", "ConfirmClearComp")
     btn("Sort Groups", 104, -12, 36, "BOTTOMRIGHT", "SortGroups")
+    btn("Autokick Monitor", 216, 12, 8, "BOTTOMLEFT", "ShowMonitor")
 
     -- restore position
     local p = GB.db.ui.point
@@ -176,6 +180,15 @@ local function createUI()
         frame:SetPoint("CENTER")
     end
     GB.ui = frame
+    GB:ApplyUISize()
+end
+
+-- Apply the configured width + scale (height is content-driven unless fixed > 0,
+-- which RefreshUI handles). Safe to call live from the options.
+function GB:ApplyUISize()
+    if not frame then return end
+    frame:SetWidth(self.db.ui.width or 240)
+    if frame.SetScale then frame:SetScale(self.db.ui.scale or 1.0) end
 end
 
 function GB:RefreshUI()
@@ -254,10 +267,14 @@ function GB:RefreshUI()
         end
     end
 
-    -- size the window to fit the (variable) content above the bottom controls
+    -- size the window to fit the (variable) content above the bottom controls, unless
+    -- the user fixed a height in options (db.ui.height > 0).
     local visible = math.min(#entries, AURA_ROWS)
     local contentBottom = 30 + #lines * 13 + 6 + visible * 16
-    frame:SetHeight(math.max(240, contentBottom + 152))
+    local fixed = self.db.ui.height or 0
+    frame:SetHeight(fixed > 0 and fixed or math.max(240, contentBottom + 152))
+    frame:SetWidth(self.db.ui.width or 240)
+    if frame.SetScale then frame:SetScale(self.db.ui.scale or 1.0) end
 
     if frame.manualCheck then frame.manualCheck:SetChecked(self.db.recruit.manualInvite and true or false) end
 end

@@ -76,25 +76,31 @@ local BUTTON_BACKDROP = {
     edgeSize = 1,
     insets = { left = 1, right = 1, top = 1, bottom = 1 },
 }
-local function btnColor(b, hover)
+local function btnColor(b, hover, red)
     if not b.SetBackdropColor then return end
-    if hover then b:SetBackdropColor(0.22, 0.22, 0.28, 1)
-    else b:SetBackdropColor(0.13, 0.13, 0.16, 0.95) end
+    if red then
+        if hover then b:SetBackdropColor(0.58, 0.18, 0.18, 1) else b:SetBackdropColor(0.42, 0.13, 0.13, 0.95) end
+    else
+        if hover then b:SetBackdropColor(0.22, 0.22, 0.28, 1) else b:SetBackdropColor(0.13, 0.13, 0.16, 0.95) end
+    end
 end
-function GB:SkinButton(b)
+-- red = a muted-red button with white text (used for the close [X]).
+function GB:SkinButton(b, red)
     if not (b and b.SetBackdrop) then return end
     for _, getter in ipairs({ "GetNormalTexture", "GetPushedTexture", "GetHighlightTexture", "GetDisabledTexture" }) do
         local t = b[getter] and b[getter](b)
         if t and t.SetTexture then t:SetTexture(nil) end
     end
     b:SetBackdrop(BUTTON_BACKDROP)
-    btnColor(b, false)
-    b:SetBackdropBorderColor(0.30, 0.30, 0.36, 1)
+    btnColor(b, false, red)
+    if red then b:SetBackdropBorderColor(0.55, 0.22, 0.22, 1) else b:SetBackdropBorderColor(0.30, 0.30, 0.36, 1) end
     local fs = b.GetFontString and b:GetFontString()
-    if fs then fs:SetTextColor(0.92, 0.92, 0.96) end
+    if fs then
+        if red then fs:SetTextColor(1, 1, 1) else fs:SetTextColor(0.92, 0.92, 0.96) end
+    end
     if b.HookScript then
-        b:HookScript("OnEnter", function(s) btnColor(s, true) end)
-        b:HookScript("OnLeave", function(s) btnColor(s, false) end)
+        b:HookScript("OnEnter", function(s) btnColor(s, true, red) end)
+        b:HookScript("OnLeave", function(s) btnColor(s, false, red) end)
     end
 end
 

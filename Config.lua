@@ -73,6 +73,16 @@ GB.defaults = {
         minimized = false,
         point = { "CENTER", nil, "CENTER", 0, 0 },
         locked = false,
+        width = 240,
+        height = 0,    -- 0 = auto-size to content; a positive value fixes the height
+        scale = 1.0,
+    },
+
+    -- Autokick Monitor window size.
+    monitor = {
+        width = 250,
+        height = 230,
+        scale = 1.0,
     },
 
     -- Minimap button.
@@ -95,6 +105,10 @@ GB.defaults = {
     -- Auto-mark tanks with raid icons: 1st tank -> circle (2), 2nd -> square (6),
     -- only if they aren't already marked. Needs you to be leader/assist.
     markTanks = true,
+
+    -- Auto-arrange raid groups (one aura per group) when a newly-learned aura leaves
+    -- a group double-covered while another has none. Manual /gb sort still available.
+    autoSort = true,
 
     -- Reserved slots for friends: [name] = "tank"|"healer"|"dps". Each friend not
     -- yet in the group holds a slot of their role, so random applicants don't take

@@ -105,6 +105,30 @@ local function makeButton(label, x, y, width, onClick)
     return btn
 end
 
+local sliderCount = 0
+local function makeSlider(label, x, y, minV, maxV, step, get, set)
+    sliderCount = sliderCount + 1
+    local s = CreateFrame("Slider", "GroupBuilderSlider" .. sliderCount, frame, "OptionsSliderTemplate")
+    s:SetPoint("TOPLEFT", x, y); s:SetWidth(170)
+    s:SetMinMaxValues(minV, maxV); s:SetValueStep(step)
+    local nm = s:GetName()
+    if type(nm) ~= "string" then nm = "GroupBuilderSlider" .. sliderCount end
+    if _G[nm .. "Low"] then _G[nm .. "Low"]:SetText(tostring(minV)) end
+    if _G[nm .. "High"] then _G[nm .. "High"]:SetText(tostring(maxV)) end
+    local function labelText(v) return ("%s: %.2f"):format(label, v) end
+    s:SetScript("OnValueChanged", function(_, v)
+        v = math.floor(v / step + 0.5) * step
+        if _G[nm .. "Text"] then _G[nm .. "Text"]:SetText(labelText(v)) end
+        set(v)
+    end)
+    refreshers[#refreshers + 1] = function()
+        local v = get() or minV
+        s:SetValue(v)
+        if _G[nm .. "Text"] then _G[nm .. "Text"]:SetText(labelText(v)) end
+    end
+    return s
+end
+
 -- Channel picker: a dropdown of SAY/YELL/PARTY/RAID/GUILD plus every chat channel
 -- you're currently in (parsed from GetChannelList), so you never type a name.
 local function announceLabel()
@@ -260,6 +284,9 @@ function GB:BuildOptions(parent)
     makeCheck("Auto-mark tanks (circle / square)", L2, nl2(22),
         function() return GB.db.markTanks end,
         function(v) GB.db.markTanks = v; if v and GB.MarkTanks then GB:MarkTanks() end end)
+    makeCheck("Auto-arrange groups (1 aura each)", L2, nl2(22),
+        function() return GB.db.autoSort end,
+        function(v) GB.db.autoSort = v end)
     makeCheck("Hide minimap button", L2, nl2(22),
         function() return GB.db.minimap.hide end,
         function(v) GB.db.minimap.hide = v; if GB.RefreshMinimap then GB:RefreshMinimap() end end)
@@ -467,4 +494,35 @@ function GB:BuildAbout(panel)
     line(-64, "Version", (GB.version or "dev"))
     line(-84, "Author", "Aol - Darkmoon")
     line(-114, "Special thanks", "Elitist Jerks, Qinan, and Schweizerhof for testing.")
+end
+
+-- Windows: per-pane width / height / scale.
+function GB:BuildWindows(panel)
+    frame = panel
+    panelTitle(panel, "GroupBuilder — Window Sizes",
+        "Resize each window. Scale changes width & height together; the status window's "
+        .. "height auto-fits its content unless you set a value (0 = auto).")
+    local L = 20
+
+    makeHeader("Status window", L, -74)
+    makeEdit("Width", L, -98, 40,
+        function() return GB.db.ui.width end,
+        function(v) GB.db.ui.width = math.max(140, math.floor(v)); if GB.ApplyUISize then GB:ApplyUISize() end end, true)
+    makeEdit("Height (0 = auto)", L + 130, -98, 40,
+        function() return GB.db.ui.height end,
+        function(v) GB.db.ui.height = math.max(0, math.floor(v)); if GB.RefreshUI then GB:RefreshUI() end end, true)
+    makeSlider("Status scale", L, -140, 0.5, 2.0, 0.05,
+        function() return GB.db.ui.scale end,
+        function(v) GB.db.ui.scale = v; if GB.ApplyUISize then GB:ApplyUISize() end end)
+
+    makeHeader("Autokick Monitor", L, -196)
+    makeEdit("Width", L, -220, 40,
+        function() return GB.db.monitor.width end,
+        function(v) GB.db.monitor.width = math.max(140, math.floor(v)); if GB.ApplyMonitorSize then GB:ApplyMonitorSize() end end, true)
+    makeEdit("Height", L + 130, -220, 40,
+        function() return GB.db.monitor.height end,
+        function(v) GB.db.monitor.height = math.max(80, math.floor(v)); if GB.ApplyMonitorSize then GB:ApplyMonitorSize() end end, true)
+    makeSlider("Monitor scale", L, -262, 0.5, 2.0, 0.05,
+        function() return GB.db.monitor.scale end,
+        function(v) GB.db.monitor.scale = v; if GB.ApplyMonitorSize then GB:ApplyMonitorSize() end end)
 end

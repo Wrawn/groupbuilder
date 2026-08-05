@@ -13,6 +13,23 @@ section here.
 - **Sort Groups** (`/gb sort` or the status button) — arranges the raid subgroups so
   every group of 5 gets a healer and an aura, with tanks in group 1, using the roles/
   auras you've tracked. Waits for combat to end if needed, and announces the layout.
+- An **Autokick Monitor** button on the status window opens the `/gb monitor` window, so
+  it's discoverable without knowing the command.
+- **Window Sizes** options tab — set the **width, height, and a scale slider** for the
+  status window and the Autokick Monitor independently. Scale resizes both dimensions at
+  once; the status window's height auto-fits its content unless you set a value. The
+  **Autokick Monitor fits its list to the box** — rows/font shrink as more players near
+  the cutoff (or the window shrinks) so nothing overlaps or spills out, with a "+N more"
+  line when there are too many to show.
+- **Auto-arrange groups** — when a newly-learned aura lands in a group that already has
+  one (while another group has none), GroupBuilder quietly re-sorts on its own, so it
+  stays one-aura-per-group hands-free. You only need to click Sort for edge cases.
+  Toggle under Interface options.
+
+### Changed
+- **Consistent window styling** — the `/gb monitor` window now matches the status window
+  (same see-through panel), all their buttons share the flat dark square look, and the
+  close **[X]** is a muted-red square with a white X (matching the minimize button).
 - **Batch role/aura check.** "Role / Aura Check" now asks the whole raid to reply **in
   raid chat** with their role + aura (words like `tank aura`, or numbers `1`/`2`/`3`),
   collects the replies for ~20s, then **whispers only the people who didn't answer**.

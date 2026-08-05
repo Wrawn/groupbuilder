@@ -26,6 +26,7 @@ local function buildInterfacePanel()
     -- Parent node + its sub-pages. Parent must be registered before its children.
     GB.interfacePanel = addCategory("GroupBuilder", nil, function(p) if GB.BuildLanding then GB:BuildLanding(p) end end)
     addCategory("Basic Options", "GroupBuilder", function(p) if GB.BuildOptions then GB:BuildOptions(p) end end)
+    addCategory("Window Sizes", "GroupBuilder", function(p) if GB.BuildWindows then GB:BuildWindows(p) end end)
     addCategory("Auto-Kick Whitelist", "GroupBuilder", function(p) if GB.BuildListPanel then GB:BuildListPanel(p, "whitelist") end end)
     addCategory("Auto-Inv Blacklist", "GroupBuilder", function(p) if GB.BuildListPanel then GB:BuildListPanel(p, "blacklist") end end)
     addCategory("Help", "GroupBuilder", function(p) if GB.BuildHelp then GB:BuildHelp(p) end end)

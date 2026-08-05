@@ -36,7 +36,22 @@ end
 -- ---------------------------------------------------------------------------
 local frame
 local rows = {}
-local MAXROWS = 20
+local MAXROWS = 30   -- with font-fit we can show more; capped by what fits the box
+local MINROW, MAXROW = 11, 18
+
+-- Given the available vertical space and how many players are near the cutoff, decide
+-- how many rows to place, the row height and font size — so rows always fit the box
+-- (shrinking as the list grows / the window shrinks) and overflow shows a "+N" line.
+function GB:MonitorFit(avail, total)
+    avail = math.max(20, avail or 20)
+    local capacity = math.max(1, math.min(MAXROWS, math.floor(avail / MINROW)))
+    local slots = math.min(math.max(total, 1), capacity)
+    local hasMore = total > slots
+    local realShown = hasMore and (slots - 1) or slots
+    local rowH = math.min(MAXROW, avail / math.max(slots, 1))
+    local fontSize = math.max(8, math.min(13, math.floor(rowH) - 2))
+    return { slots = slots, realShown = realShown, hasMore = hasMore, rowH = rowH, fontSize = fontSize }
+end
 
 local function makeRow(i)
     local fs = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -49,15 +64,17 @@ end
 
 local function build()
     frame = CreateFrame("Frame", "GroupBuilderMonitor", UIParent)
-    frame:SetWidth(250); frame:SetHeight(230); frame:SetPoint("CENTER", 0, -120)
-    GB:Skin(frame, 0.92); frame:SetFrameStrata("MEDIUM")
+    frame:SetWidth(GB.db.monitor.width or 250); frame:SetHeight(GB.db.monitor.height or 230); frame:SetPoint("CENTER", 0, -120)
+    GB:Skin(frame, 0.55); frame:SetFrameStrata("MEDIUM")   -- match the status window
     frame:EnableMouse(true); frame:SetMovable(true); frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving); frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOP", 0, -10); title:SetText("Autokick Monitor"); frame.title = title
-    local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -4, -4); close:SetScript("OnClick", function() frame:Hide() end)
+    local close = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    close:SetWidth(18); close:SetHeight(18); close:SetPoint("TOPRIGHT", -6, -7); close:SetText("X")
+    close:SetScript("OnClick", function() frame:Hide() end)
+    GB:SkinButton(close, true)   -- muted red, white X
 
     for i = 1, MAXROWS do rows[i] = makeRow(i) end
 
@@ -65,6 +82,7 @@ local function build()
     pass:SetWidth(190); pass:SetHeight(22); pass:SetPoint("BOTTOM", 0, 12)
     pass:SetText("Pass Lead & Leave")
     pass:SetScript("OnClick", function() if GB.PassLeadPrompt then GB:PassLeadPrompt() end end)
+    GB:SkinButton(pass)
 
     GB.monitorFrame = frame
 end
@@ -83,22 +101,60 @@ function GB:RefreshMonitor()
         end
     end
     table.sort(near, function(a, b) return a.gap < b.gap end)   -- closest to the cutoff first
+
+    -- Fit the rows to the box: shrink the row height + font as more people appear (or
+    -- as the window gets shorter) so they never overlap or spill past the bottom. If
+    -- there are more than fit even at the minimum size, the last row shows "+N more".
+    local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+    local topPad, bottomPad = 40, 44                 -- title area / Pass-Lead button
+    local h = frame.GetHeight and frame:GetHeight()
+    local w = frame.GetWidth and frame:GetWidth()
+    if type(h) ~= "number" then h = self.db.monitor.height or 230 end
+    if type(w) ~= "number" then w = self.db.monitor.width or 250 end
+    local avail = math.max(20, h - topPad - bottomPad)
+    local total = #near
+    local fit = self:MonitorFit(avail, total)
+    local slots, realShown, hasMore, rowH, fontSize = fit.slots, fit.realShown, fit.hasMore, fit.rowH, fit.fontSize
+
     for i = 1, MAXROWS do
-        local fs, e = rows[i], near[i]
-        if e then
-            local col = e.gap <= 1 and "|cffff5555" or (e.gap <= 3 and "|cffffcc00" or "|cffffffff")
-            fs:SetText(("%s%s (%s)|r  — lvl %d"):format(col, e.name, e.role, e.lvl))
+        local fs = rows[i]
+        if total > 0 and i <= slots then
+            fs:ClearAllPoints()
+            fs:SetPoint("TOPLEFT", 16, -(topPad + (i - 1) * rowH))
+            fs:SetWidth(w - 32); fs:SetJustifyH("LEFT")
+            if fs.SetFont then fs:SetFont(FONT, fontSize) end
+            if hasMore and i == slots then
+                fs:SetText(("|cff888888+%d more near cutoff…|r"):format(total - realShown))
+            else
+                local e = near[i]
+                local col = e.gap <= 1 and "|cffff5555" or (e.gap <= 3 and "|cffffcc00" or "|cffffffff")
+                fs:SetText(("%s%s (%s)|r — lvl %d"):format(col, e.name, e.role, e.lvl))
+            end
             fs:Show()
         else
             fs:Hide()
         end
     end
-    frame.title:SetText(("Autokick Monitor (%d near lvl %d)"):format(#near, maxLevel))
-    if #near == 0 then rows[1]:SetText("|cff888888(nobody within 5 levels)|r"); rows[1]:Show() end
+    frame.title:SetText(("Autokick Monitor (%d near lvl %d)"):format(total, maxLevel))
+    if total == 0 then
+        rows[1]:ClearAllPoints(); rows[1]:SetPoint("TOPLEFT", 16, -topPad)
+        if rows[1].SetFont then rows[1]:SetFont(FONT, 11) end
+        rows[1]:SetText("|cff888888(nobody within 5 levels)|r"); rows[1]:Show()
+    end
+end
+
+-- Apply the configured width / height / scale (live from options), then re-fit rows.
+function GB:ApplyMonitorSize()
+    if not frame then return end
+    frame:SetWidth(self.db.monitor.width or 250)
+    frame:SetHeight(self.db.monitor.height or 230)
+    if frame.SetScale then frame:SetScale(self.db.monitor.scale or 1.0) end
+    self:RefreshMonitor()   -- re-fit the list to the new box
 end
 
 function GB:ShowMonitor()
     if not frame then build() end
+    GB:ApplyMonitorSize()
     if frame:IsShown() then
         frame:Hide()
     else

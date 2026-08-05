@@ -69,7 +69,8 @@ function GB:PlanGroups()
     return groupOf, roster, info, groups, currentGroup
 end
 
-function GB:SortGroups()
+-- quiet = auto-sort (skip the raid-chat announcement of the layout).
+function GB:SortGroups(quiet)
     if GetNumRaidMembers() == 0 then self:Print("you must be in a raid to sort groups."); return end
     if not (IsRaidLeader() or (IsRaidOfficer and IsRaidOfficer())) then
         self:Print("you must be raid leader or assist to sort groups."); return
@@ -150,7 +151,7 @@ function GB:SortGroups()
             end
         end
         if self and self.MarkTanks then self:MarkTanks() end
-        announce()
+        if not quiet then announce() end
         GB:Print(("groups sorted: %d moved, %d couldn't be placed."):format(moved, failed))
     end
 
@@ -183,6 +184,40 @@ function GB:SortGroups()
             if elapsed >= 0.15 then elapsed = 0; tick() end
         end)
     end
+end
+
+-- True when some subgroup has 2+ auras while another has none — i.e. an aura is
+-- wasted where one already exists and a move would spread coverage.
+function GB:AuraImbalanced()
+    if GetNumRaidMembers() == 0 then return false end
+    self:RefreshRoster()
+    local groups = math.max(1, math.ceil(GetNumRaidMembers() / 5))
+    local auraCount = {}
+    for g = 1, groups do auraCount[g] = 0 end
+    for _, m in ipairs(self.roster) do
+        local c = self.claims[m.name]
+        if c and c.aura == true then local g = m.subgroup or 1; auraCount[g] = (auraCount[g] or 0) + 1 end
+    end
+    local hasDouble, hasEmpty = false, false
+    for g = 1, groups do
+        if (auraCount[g] or 0) >= 2 then hasDouble = true end
+        if (auraCount[g] or 0) == 0 then hasEmpty = true end
+    end
+    return hasDouble and hasEmpty
+end
+
+-- Called when an aura is (re)learned: if that left a group double-covered while
+-- another has none, quietly re-sort so it stays one-aura-per-group automatically.
+-- Debounced, leader-only, and off when db.autoSort is false.
+function GB:MaybeAutoSort()
+    if not (self.db and self.db.autoSort) then return end
+    if not (IsRaidLeader() or (IsRaidOfficer and IsRaidOfficer())) then return end
+    if not self:AuraImbalanced() then return end
+    local now = GetTime()
+    if self._lastAutoSort and (now - self._lastAutoSort) < 5 then return end
+    self._lastAutoSort = now
+    self:Print("|cff888888auto-arranging groups (an aura landed where one already was)…|r")
+    self:SortGroups(true)   -- quiet: no raid announcement
 end
 
 -- If a sort was requested in combat, run it when combat ends.
