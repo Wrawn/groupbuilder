@@ -53,16 +53,19 @@ local function makeEdit(label, x, y, width, get, set, numeric, boxOffset)
     local eb = CreateFrame("EditBox", "GroupBuilderOptEdit" .. editCount, frame, "InputBoxTemplate")
     eb:SetAutoFocus(false)
     eb:SetHeight(18); eb:SetWidth(width)
+    -- Force a visible font object — some UI skins (e.g. ElvUI) strip InputBoxTemplate's
+    -- font, which left the text invisible even though SetText was working.
+    eb:SetFontObject(ChatFontNormal or GameFontHighlightSmall)
     if boxOffset then
         eb:SetPoint("LEFT", lbl, "LEFT", boxOffset, 0)
     else
         eb:SetPoint("LEFT", lbl, "RIGHT", 10, 0)
     end
     if numeric then
-        -- numbers sit centered in a snug box so there's no trailing gap
-        eb:SetNumeric(true)
+        -- numbers sit centered; commit() validates via tonumber (no SetNumeric — it
+        -- interfered with programmatic SetText on this client).
         eb:SetJustifyH("CENTER")
-        eb:SetMaxLetters(3)
+        eb:SetMaxLetters(5)
     else
         eb:SetJustifyH("LEFT")
     end
@@ -75,25 +78,11 @@ local function makeEdit(label, x, y, width, get, set, numeric, boxOffset)
     eb:SetScript("OnEnterPressed", commit)
     eb:SetScript("OnEditFocusLost", commit)
     eb:SetScript("OnEscapePressed", function() eb:ClearFocus(); GB:RefreshOptions() end)
-    refreshers[#refreshers + 1] = function() eb:SetText(tostring(get() or "")) end
+    refreshers[#refreshers + 1] = function()
+        eb:SetText(tostring(get() or ""))
+        if eb.SetCursorPosition then eb:SetCursorPosition(0) end
+    end
     return eb, lbl
-end
-
-local function makeCycle(label, x, y, width, values, get, set)
-    local lbl = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    lbl:SetPoint("TOPLEFT", x, y)
-    lbl:SetText(label)
-    local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    btn:SetHeight(20); btn:SetWidth(width)
-    btn:SetPoint("LEFT", lbl, "RIGHT", 10, 0)
-    btn:SetScript("OnClick", function()
-        local cur, idx = get(), 1
-        for i, v in ipairs(values) do if v == cur then idx = i break end end
-        idx = (idx % #values) + 1
-        set(values[idx]); apply()
-    end)
-    refreshers[#refreshers + 1] = function() btn:SetText(tostring(get())) end
-    return btn
 end
 
 local function makeButton(label, x, y, width, onClick)
@@ -169,6 +158,29 @@ local function makeChannelDropdown(label, x, y)
     return dd
 end
 
+-- Generic dropdown over a fixed list of labels. get() returns the current label,
+-- set(label) applies it.
+local ddCount = 0
+local function makeDropdown(label, x, y, width, options, get, set)
+    local lbl = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    lbl:SetPoint("TOPLEFT", x, y); lbl:SetText(label)
+    ddCount = ddCount + 1
+    local dd = CreateFrame("Frame", "GroupBuilderDD" .. ddCount, frame, "UIDropDownMenuTemplate")
+    dd:SetPoint("LEFT", lbl, "RIGHT", -6, -2)
+    UIDropDownMenu_SetWidth(dd, width)
+    UIDropDownMenu_Initialize(dd, function()
+        for _, opt in ipairs(options) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = opt
+            info.func = function() set(opt); UIDropDownMenu_SetText(dd, opt); apply() end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+    UIDropDownMenu_SetText(dd, get())
+    refreshers[#refreshers + 1] = function() UIDropDownMenu_SetText(dd, get()) end
+    return dd
+end
+
 -- ---- build -----------------------------------------------------------------
 -- Self role <-> label mapping for the "You" cycle button.
 local SELF_ROLES = { "None", "Tank", "Healer", "DPS" }
@@ -194,7 +206,7 @@ function GB:BuildOptions(parent)
 
     -- ===== Column 1 =====
     makeHeader("You (your own slot)", L1, nl1(22))
-    makeCycle("My role", L1, nl1(26), 80, SELF_ROLES,
+    makeDropdown("My role", L1, nl1(28), 80, SELF_ROLES,
         function() local c = GB:GetSelfClaim(); return (c and ROLE_TO_LABEL[c.role]) or "None" end,
         function(v) GB:SetSelfField("role", LABEL_TO_ROLE[v]) end)
     makeCheck("I am bringing an aura", L1, nl1(22),

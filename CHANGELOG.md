@@ -9,6 +9,14 @@ the new version + date. The GitHub release notes are generated from the matching
 section here.
 
 ## [Unreleased]
+### Fixed
+- **Number fields in the options no longer show blank.** Width/height, tanks/healers/
+  dps/auras, kick-at-level, etc. now populate with their saved values every time you
+  open a panel (they're re-read from your settings on show, not just once at login).
+
+### Changed
+- **"My role" is now a dropdown** (was a click-to-cycle button).
+
 ### Added
 - **Sort Groups** (`/gb sort` or the status button) — arranges the raid subgroups so
   every group of 5 gets a healer and an aura, with tanks in group 1, using the roles/

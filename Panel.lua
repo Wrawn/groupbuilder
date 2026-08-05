@@ -18,6 +18,9 @@ local function addCategory(name, parentName, builder)
     p.refresh = function() if GB.RefreshOptions then GB:RefreshOptions() end end
     p.okay = function() end
     p.cancel = function() end
+    -- Repopulate every widget from the DB whenever the panel is actually shown — the
+    -- Blizzard `refresh` hook doesn't fire reliably, which left number fields blank.
+    p:SetScript("OnShow", function() if GB.RefreshOptions then GB:RefreshOptions() end end)
     if InterfaceOptions_AddCategory then InterfaceOptions_AddCategory(p) end
     return p
 end
