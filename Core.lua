@@ -246,7 +246,8 @@ local function handleSlash(msg)
         GB:Print("  /gb channel <where> - say|yell|party|raid|guild|<channelName>")
         GB:Print("  /gb reform         - kick everyone & whisper them to pst 'reform'")
         GB:Print("  /gb reinvite       - send invites to the reform list (once you've left)")
-        GB:Print("  /gb roles          - popup of who is tank / healer")
+        GB:Print("  /gb roles          - editable table of everyone's role / aura")
+        GB:Print("  /gb sort           - arrange raid groups (healer + aura each, tanks in G1)")
         GB:Print("  /gb clear          - reset the tracked comp (clear all roles/auras)")
         GB:Print("  /gb events         - toggle event logging (find the leave-instance event)")
         GB:Print("  /gb levels         - print each member's detected level")
@@ -295,12 +296,18 @@ local function handleSlash(msg)
         GB:Print("ktest: kicking |cffffcc00" .. target .. "|r via UninviteUnit(\"" .. target .. "\")...")
         UninviteUnit(target)
         return
+    elseif cmd == "ptest" then
+        if GB.PassLeadTest then GB:PassLeadTest() else GB:Print("ptest not loaded — fully restart the client.") end
+        return
     elseif cmd == "pass" then
+        -- /gb pass            -> confirm, hand off to a RANDOM member & leave
+        -- /gb pass <name>     -> confirm, hand off to <name>
+        -- /gb pass [name] confirm -> skip the confirm
         local pname, tail = rest:match("^(%S*)%s*(.-)%s*$")
-        if not pname or pname == "" then GB:Print("usage: /gb pass <name> [confirm]"); return end
         if not GB.PassLead then GB:Print("Pass-lead not loaded — fully restart the game client."); return end
-        if tail:lower() == "confirm" then GB:PassLead(GB:NormName(pname))
-        else GB:ConfirmPassLead(GB:NormName(pname)) end
+        local who = (pname ~= "") and pname or nil
+        if (tail or ""):lower() == "confirm" then GB:PassLead(who)
+        else GB:ConfirmPassLead(who) end
         return
     elseif cmd == "vers" or cmd == "version" then
         GB:Print("version |cff33ff99" .. tostring(GB.version) .. "|r")
@@ -388,6 +395,9 @@ local function handleSlash(msg)
         GB:ReinviteGroup(); return
     elseif cmd == "roles" then
         GB:ShowRoles(); return
+    elseif cmd == "sort" then
+        if GB.SortGroups then GB:SortGroups() else GB:Print("Sort not loaded — fully restart the client.") end
+        return
     elseif cmd == "clear" or cmd == "clearcomp" then
         GB:ConfirmClearComp(); return
     elseif cmd == "macro" then

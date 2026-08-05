@@ -9,7 +9,18 @@ the new version + date. The GitHub release notes are generated from the matching
 section here.
 
 ## [Unreleased]
+### Added
+- **Sort Groups** (`/gb sort` or the status button) — arranges the raid subgroups so
+  every group of 5 gets a healer and an aura, with tanks in group 1, using the roles/
+  auras you've tracked. Waits for combat to end if needed, and announces the layout.
+- **Batch role/aura check.** "Role / Aura Check" now asks the whole raid to reply **in
+  raid chat** with their role + aura (words like `tank aura`, or numbers `1`/`2`/`3`),
+  collects the replies for ~20s, then **whispers only the people who didn't answer**.
+
 ### Fixed
+- **Autokick no longer gets blocked in combat.** `UninviteUnit` is protected on
+  Ascension, so an automatic kick fired mid-combat was refused ("prevented the call of
+  the secure function"). The kick is now **queued and runs the instant combat ends**.
 - **Sub-60 autokick now actually removes the player** (before, it only sent the
   thanks-for-coming whisper). It was passing a `raidN` unit token to the kick, but on
   3.3.5 the kick needs the player's **name** — fixed here and in the reform kick. Added
@@ -48,12 +59,13 @@ section here.
   (button, `/gb reinvite`, and the "pst reform" whisper) stays as a fallback for anyone
   who doesn't leave right away. There's a new **`/gb leave`** manual command too, and an
   **autoLeave** toggle. (Only fires when you're actually inside a Manastorm.)
-- **Pass Lead & Leave** — a button on the `/gb monitor` window (and `/gb pass <name>`)
-  that hands the raid off and leaves. It first promotes **everyone** to assist (so an
-  AFK new leader can't strand the group), passes lead to the player you pick, and
-  whispers them a plain **Tanks / Healers / Auras** summary (no addon jargon — they
-  don't need GroupBuilder; you're left out of the list since you're leaving). Confirms
-  first, and only the current leader can trigger it.
+- **Pass Lead & Leave** — a button on the `/gb monitor` window (and `/gb pass`) that
+  hands the raid off and leaves. It promotes **everyone** to assist (so an AFK new leader
+  can't strand the group), picks a **random** member as the new leader (not your call —
+  you won't be there), and **announces the key roles to raid chat**: just **Tanks /
+  Healers / Auras** (you're excluded since you're leaving; aura-unknown counts as no
+  aura; no dps/whitelist noise). `/gb pass <name>` still lets you name someone. Confirms
+  first, leader-only.
 - **`/gb debug`** — a dry-run panel. Buttons for Reinvite / Reform / Clear Comp / Set
   Role / Autokick-state each show what GB *would* do (who it'd invite/kick and why, the
   live per-player autokick table) in a copy-pasteable window. Nothing is performed.

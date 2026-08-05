@@ -19,5 +19,6 @@ SetRole.lua
 Debug.lua
 Monitor.lua
 PassLead.lua
+GroupSort.lua
 Options.lua
 Panel.lua

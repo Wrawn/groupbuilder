@@ -165,6 +165,7 @@ local function createUI()
     btn("Edit Roles", 104, 12, 64, "BOTTOMLEFT", "ShowRoles")
     btn("Role / Aura Check", 104, -12, 64, "BOTTOMRIGHT", "AuraCheck")
     btn("Clear Comp", 104, 12, 36, "BOTTOMLEFT", "ConfirmClearComp")
+    btn("Sort Groups", 104, -12, 36, "BOTTOMRIGHT", "SortGroups")
 
     -- restore position
     local p = GB.db.ui.point

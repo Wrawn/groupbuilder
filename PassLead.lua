@@ -1,7 +1,8 @@
 -- GroupBuilder :: PassLead.lua
--- Hand the raid off to someone else and leave. Promotes EVERYONE to assist first
--- (so a single AFK new leader can't strand the group), passes lead to your pick,
--- prints/whispers a handoff report, then leaves.
+-- Hand the raid off and leave. Promotes EVERYONE to assist first (so a single AFK new
+-- leader can't strand the group), picks a RANDOM member as the new leader (it's not
+-- your call who leads — you're just doing the group a favor by reforming + handing
+-- off), announces the key roles (tanks / healers / auras) to raid chat, then leaves.
 
 local addonName, GB = ...
 
@@ -21,158 +22,135 @@ local function runLine(line)
     end
 end
 
--- ---------------------------------------------------------------------------
---  Handoff report (structured once, rendered for both the local frame & whisper)
--- ---------------------------------------------------------------------------
-function GB:CollectHandoff()
-    self:RefreshRoster()
-    local me = self:MyName()
-    local maxLevel = self.db.leveling.maxLevel or 60
-    local out = {}
-    for _, m in ipairs(self.roster) do
-        local c = self.claims[m.name]
-        local lvl = m.level or 0
-        local flags = {}
-        if maxLevel < 60 and lvl > 0 and lvl >= (maxLevel - 5) and lvl < 60 then
-            flags[#flags + 1] = ("near autokick (lvl %d/%d)"):format(lvl, maxLevel)
-        end
-        if m.name ~= me and not (self._gbInvited and self._gbInvited[m.name]) then
-            flags[#flags + 1] = "manual invite / unverified"
-        end
-        if self._askedNew and self._askedNew[m.name] and not (c and c.role) then
-            flags[#flags + 1] = "awaiting whisper reply"
-        end
-        if self:IsWhitelisted(m.name) then flags[#flags + 1] = "whitelisted" end
-        local role = (c and c.role) or "unknown"
-        local aura = c and (c.aura == true and "has aura" or c.aura == false and "MISSING aura" or "aura unknown")
-            or "aura unknown"
-        out[#out + 1] = {
-            name = m.name, role = role, aura = aura, flags = flags,
-            important = (role == "tank" or role == "healer" or #flags > 0),
-        }
+-- Build the "name - role[- aura]" handoff lines from a roster + claims, excluding
+-- `me`. Order: tanks, then healers, then any other aura-holders. Aura shown only if
+-- true (unknown = no aura). Shared by the real hand-off and /gb ptest.
+local function handoffLines(roster, claims, me)
+    local lines, seen = {}, {}
+    local function add(name, role, hasAura)
+        if seen[name] then return end
+        seen[name] = true
+        lines[#lines + 1] = ("%s - %s%s"):format(name, role, hasAura and " - aura" or "")
     end
-    return out
+    for _, m in ipairs(roster) do local c = claims[m.name]
+        if c and m.name ~= me and c.role == "tank" then add(m.name, "tank", c.aura == true) end
+    end
+    for _, m in ipairs(roster) do local c = claims[m.name]
+        if c and m.name ~= me and c.role == "healer" then add(m.name, "healer", c.aura == true) end
+    end
+    for _, m in ipairs(roster) do local c = claims[m.name]
+        if c and m.name ~= me and c.aura == true and c.role ~= "tank" and c.role ~= "healer" then
+            add(m.name, c.role or "dps", true)
+        end
+    end
+    return lines
 end
 
-function GB:HandoffReport()
-    local rows = self:CollectHandoff()
-    local lines = {
-        "== GroupBuilder handoff ==",
-        "You lead now. Promote/kick from the raid UI. Tracked state:",
-        "",
-    }
-    for _, r in ipairs(rows) do
-        local ftxt = (#r.flags > 0) and ("  {" .. table.concat(r.flags, ", ") .. "}") or ""
-        lines[#lines + 1] = ("%s — %s — %s%s"):format(r.name, r.role, r.aura, ftxt)
-    end
-    if #rows == 0 then lines[#lines + 1] = "(nobody tracked)" end
-    return table.concat(lines, "\n")
+-- A random group member who isn't you.
+function GB:RandomMember()
+    local me = self:MyName()
+    local pool = {}
+    for _, m in ipairs(self.roster) do if m.name ~= me then pool[#pool + 1] = m.name end end
+    if #pool == 0 then return nil end
+    return pool[math.random(#pool)]
 end
 
 -- ---------------------------------------------------------------------------
 --  The handoff itself
 -- ---------------------------------------------------------------------------
 function GB:PassLead(name)
-    name = self:NormName(name)
     if not amLeader() then
         self:Print("Only the current raid/party LEADER can pass lead.")
         return
     end
     self:RefreshRoster()
-    if not self.rosterByName[name] then
-        self:Print(name .. " isn't in your group — can't pass lead to them.")
-        return
+    local me = self:MyName()
+
+    -- Target: an explicit name if it's a real other member, otherwise pick at random.
+    local target = name and name ~= "" and self:NormName(name) or nil
+    if not (target and self.rosterByName[target] and target ~= me) then
+        target = self:RandomMember()
     end
-    if name == self:MyName() then
-        self:Print("That's you — pick someone else to hand off to.")
+    if not target then
+        self:Print("no one else in the group to hand off to.")
         return
     end
 
-    -- Report BEFORE we change anything (so it reflects the group you're handing off).
-    local report = self:HandoffReport()
+    -- Key players only (tanks, healers, aura-holders), you (leaving) excluded.
+    local lines = handoffLines(self.roster, self.claims, me)
 
-    -- 1) Promote everyone to assist first (raid only), so an AFK new leader isn't
-    --    a single point of failure. Must happen while WE are still leader.
+    -- 1) Promote everyone to assist first, so an AFK new leader isn't a single point
+    --    of failure. Must happen while WE are still leader.
     if GetNumRaidMembers() > 0 and PromoteToAssistant then
-        local me = self:MyName()
         for i = 1, GetNumRaidMembers() do
-            local u = "raid" .. i
-            local nm = UnitName(u)
-            if nm and self:NormName(nm) ~= me then pcall(PromoteToAssistant, u) end
+            local nm = UnitName("raid" .. i)
+            if nm and self:NormName(nm) ~= me then pcall(PromoteToAssistant, "raid" .. i) end
         end
     end
 
     -- 2) Pass leadership to the chosen player.
-    if PromoteToRaidLeader then pcall(PromoteToRaidLeader, name)
-    else runLine("/promote " .. name) end
+    if PromoteToRaidLeader then pcall(PromoteToRaidLeader, target)
+    else runLine("/promote " .. target) end
 
-    -- 3) Whisper the new leader a plain tanks / healers / auras summary. They don't
-    --    have the addon, so no flags or jargon — just who's what.
-    local me = self:MyName()
-    local tanks, heals, auras = {}, {}, {}
-    for _, m in ipairs(self.roster) do
-        local c = self.claims[m.name]
-        if c and m.name ~= me then   -- you're leaving, so leave yourself out of the handoff
-            if c.role == "tank" then tanks[#tanks + 1] = m.name
-            elseif c.role == "healer" then heals[#heals + 1] = m.name end
-            if c.aura == true then auras[#auras + 1] = m.name end
-        end
-    end
-    local function listOr(t) return #t > 0 and table.concat(t, ", ") or "none" end
-    self:Reply(name, "You're raid lead now (everyone's been made assist). Group setup:")
-    self:Reply(name, "Tanks: " .. listOr(tanks))
-    self:Reply(name, "Healers: " .. listOr(heals))
-    self:Reply(name, "Auras: " .. listOr(auras))
-
-    -- 4) Show the full report locally, print, and leave.
-    if self.ShowText then self:ShowText("Raid handed off to " .. name, report) end
-    self:Print("Passed lead to " .. name .. " (all promoted to assist). Leaving group.")
+    -- 3) Announce to the group: a header, then one line per key player.
+    local chan = GetNumRaidMembers() > 0 and "RAID" or "PARTY"
+    SendChatMessage(("%s is now leader (everyone's been made assist). Key players:"):format(target), chan)
+    for _, line in ipairs(lines) do SendChatMessage(line, chan) end
+    self:Print(("Passed lead to |cffffcc00%s|r (all assist) and announced %d key player(s). Leaving."):format(target, #lines))
 
     if LeaveParty then self:After(2, function() if LeaveParty then LeaveParty() end end) end
 end
 
 -- ---------------------------------------------------------------------------
---  Confirmations
+--  Confirmation (button on the monitor + /gb pass)
 -- ---------------------------------------------------------------------------
 StaticPopupDialogs = StaticPopupDialogs or {}
 
--- /gb pass <name> — name known, ask yes/no.
-StaticPopupDialogs["GROUPBUILDER_PASSLEAD_CONFIRM"] = {
-    text = "Pass raid lead to %s and LEAVE?\nEveryone is promoted to assist first, then %s becomes leader.",
-    button1 = "Pass Lead", button2 = "Cancel",
-    OnAccept = function(self) if self.data then GB:PassLead(self.data) end end,
+StaticPopupDialogs["GROUPBUILDER_PASSLEAD"] = {
+    text = "Pass raid lead to %s and LEAVE?\nEveryone is promoted to assist first, and the key roles are announced to the raid.",
+    button1 = "Pass & Leave", button2 = "Cancel",
+    OnAccept = function(self) GB:PassLead(self.data) end,   -- data = a name, or nil = random
     timeout = 0, whileDead = true, hideOnEscape = true,
 }
 
+-- name = nil -> hand off to a random member.
 function GB:ConfirmPassLead(name)
+    name = (name and name ~= "") and self:NormName(name) or nil
     if not StaticPopup_Show then return self:PassLead(name) end
-    local d = StaticPopup_Show("GROUPBUILDER_PASSLEAD_CONFIRM", name, name)
+    local who = name or "a random member"
+    local d = StaticPopup_Show("GROUPBUILDER_PASSLEAD", who)
     if d then d.data = name end
 end
 
--- Button on the monitor — ask for the name, then hand off.
-StaticPopupDialogs["GROUPBUILDER_PASSLEAD"] = {
-    text = "Pass raid lead to whom (and LEAVE)?\nEveryone is promoted to assist first.",
-    button1 = "Pass Lead", button2 = "Cancel",
-    hasEditBox = true, maxLetters = 24,
-    OnShow = function(self)
-        local eb = self.editBox or getglobal(self:GetName() .. "EditBox")
-        if eb then eb:SetText(""); eb:SetFocus() end
-    end,
-    OnAccept = function(self)
-        local eb = self.editBox or getglobal(self:GetName() .. "EditBox")
-        local n = eb and eb:GetText()
-        if n and n ~= "" then GB:PassLead(GB:NormName(n)) end
-    end,
-    EditBoxOnEnterPressed = function(self)
-        local parent = self:GetParent()
-        local n = self:GetText()
-        if n and n ~= "" then GB:PassLead(GB:NormName(n)) end
-        if parent then parent:Hide() end
-    end,
-    timeout = 0, whileDead = true, hideOnEscape = true,
-}
+function GB:PassLeadPrompt() self:ConfirmPassLead(nil) end
 
-function GB:PassLeadPrompt()
-    if StaticPopup_Show then StaticPopup_Show("GROUPBUILDER_PASSLEAD") end
+-- /gb ptest — dry formatting test. Builds a synthetic 15-man (2 tanks, 3 healers,
+-- 10 dps; 3 auras split 1 tank / 1 healer / 1 dps), with YOU as a dps with no aura who
+-- is leaving, and prints the exact hand-off announcement to /say — no group needed.
+function GB:PassLeadTest()
+    local me = self:MyName() or "You"
+    local roster, claims = {}, {}
+    local function put(name, role, aura, lvl)
+        roster[#roster + 1] = { name = name, subgroup = 1, level = lvl }
+        claims[name] = { role = role, aura = aura }
+    end
+    put(me, "dps", false, 57)             -- you: dps, no aura, leaving (excluded)
+    put("Kusonoki", "tank", true, 59)     -- tank + aura
+    put("Bruticus", "tank", false, 58)
+    put("Homelessman", "healer", true, 57)-- healer + aura
+    put("Imay", "healer", false, 56)
+    put("Sylvara", "healer", false, 58)
+    put("Topaze", "dps", true, 55)        -- dps + aura
+    for i, n in ipairs({ "Mavrayn", "Deleted", "Aitutu", "Smithagent", "Iilflame", "Zugzug", "Boople", "Nyxen" }) do
+        put(n, "dps", false, 54 + (i % 6))
+    end
+
+    local pool = {}
+    for _, m in ipairs(roster) do if m.name ~= me then pool[#pool + 1] = m.name end end
+    local target = pool[math.random(#pool)]
+    local lines = handoffLines(roster, claims, me)
+
+    SendChatMessage(("%s is now leader (everyone's been made assist). Key players:"):format(target), "SAY")
+    for _, line in ipairs(lines) do SendChatMessage(line, "SAY") end
+    self:Print(("ptest: sent a %d-key-player hand-off to /say (you = dps no aura, excluded)."):format(#lines))
 end

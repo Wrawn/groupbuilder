@@ -62,6 +62,20 @@ local function parseWhisper(msg)
     }
 end
 
+-- Batch raid-chat replies may use numbers: 1 = tank, 2 = heal, 3 = aura (e.g. "1 3").
+-- No 1/2 = dps; presence of 3 = has aura, its absence (in a numbers-only reply) = no aura.
+local function hasNum(m, n)
+    return m == n or m:find("%D" .. n .. "%D") ~= nil or m:find("^" .. n .. "%D") ~= nil or m:find("%D" .. n .. "$") ~= nil
+end
+local function parseNumbers(msg)
+    if not msg:find("^[%s%d]+$") then return nil, nil end   -- only treat a numbers-only reply
+    local m = " " .. msg .. " "
+    local hasT, hasH, hasA = hasNum(m, "1"), hasNum(m, "2"), hasNum(m, "3")
+    if not (hasT or hasH or hasA) then return nil, nil end
+    local role = hasT and "tank" or hasH and "healer" or "dps"
+    return role, hasA   -- aura yes(3)/no, definitively
+end
+
 -- Maps a singular role name to its plural key in status.need.
 local NEED_KEY = { tank = "tanks", healer = "healers", dps = "dps" }
 
@@ -226,8 +240,9 @@ local function groupLabel(sub) return "G" .. tostring(sub or 1) end
 
 -- Handle a whisper from someone already in the group: record any role / aura /
 -- looms they mention (all at once). Returns true if we consumed the message.
-local function handleGroupMemberReply(name, parsed)
-    local entry = GB.rosterByName[name]
+-- Set a group member's claim from a parsed self-report. Silent (no whisper).
+-- Returns true + the claim if anything was learned.
+local function applyReply(name, parsed)
     local c = {}
     if parsed.namedRole then
         c.role = parsed.roles.tank and "tank" or parsed.roles.healer and "healer" or "dps"
@@ -240,15 +255,57 @@ local function handleGroupMemberReply(name, parsed)
     end
     if parsed.looms then c.looms = true end
     if not next(c) then return false end
-
     GB:SetClaim(name, c)
+    return true, c
+end
+
+local function claimBits(name, c)
+    local entry = GB.rosterByName[name]
     local bits = {}
     if c.role then bits[#bits + 1] = c.role end
     if c.aura == true then bits[#bits + 1] = "aura for " .. groupLabel(entry and entry.subgroup) end
     if c.aura == false then bits[#bits + 1] = "no aura" end
-    GB:Reply(name, ("%s: Got it — %s. Thanks!"):format(GB:Tag(), table.concat(bits, ", ")))
+    return table.concat(bits, ", ")
+end
+
+-- A group member whispered us their role/aura — update + confirm to them.
+local function handleGroupMemberReply(name, parsed)
+    local ok, c = applyReply(name, parsed)
+    if not ok then return false end
+    GB:Reply(name, ("%s: Got it — %s. Thanks!"):format(GB:Tag(), claimBits(name, c)))
     return true
 end
+
+-- A group member replied in RAID/PARTY chat during a role-check window — update
+-- their claim silently (no whisper spam), note them as answered.
+local function collectReply(name, msg)
+    if not (GB._collectUntil and GetTime() <= GB._collectUntil) then return end
+    if name == GB:MyName() then return end
+    if not GB.rosterByName[name] then return end        -- only players in the group
+    local parsed = parseWhisper(msg)
+    if not parsed.namedRole then
+        local r, a = parseNumbers(msg)
+        if r then parsed.roles[r] = true; parsed.namedRole = true end
+        if a ~= nil then if a then parsed.aura = true else parsed.auraNo = true end end
+    end
+    askedAura[name] = GetTime(); checkAsked[name] = GetTime()   -- so a bare 'no' counts
+    local ok, c = applyReply(name, parsed)
+    if ok then
+        GB._collected = GB._collected or {}
+        GB._collected[name] = true
+        GB:UpdateAnnounce(); GB:RefreshUI()
+        GB:Print(("role check: |cffffff00%s|r → %s"):format(name, claimBits(name, c)))
+    end
+end
+
+local function onGroupChat(_, msg, author)
+    if author then collectReply(GB:NormName(author), msg or "") end
+end
+GB:On("CHAT_MSG_RAID", onGroupChat)
+GB:On("CHAT_MSG_RAID_LEADER", onGroupChat)
+GB:On("CHAT_MSG_RAID_WARNING", onGroupChat)
+GB:On("CHAT_MSG_PARTY", onGroupChat)
+GB:On("CHAT_MSG_PARTY_LEADER", onGroupChat)
 
 -- While auras are still missing, ask group members in uncovered groups whether
 -- they have one, so coverage fills in as the raid forms.
@@ -279,9 +336,10 @@ function GB:PollAuras()
     end
 end
 
--- Manual aura check: print current per-group coverage to you and ask the raid
--- (in /raid) for anyone with an aura to report. Bound to /gb aura check and the
--- status window button.
+-- Role/Aura check: print current per-group coverage to you, ask the raid to reply
+-- in chat with their role + aura, collect for a window, then whisper non-responders.
+-- Bound to /gb aura check and the status window button.
+local ROLE_CHECK_WINDOW = 20
 function GB:AuraCheck()
     if not self:CanLead() then
         self:Print("you need to be raid/party leader or assist to run a role/aura check.")
@@ -316,33 +374,44 @@ function GB:AuraCheck()
     end
     self:Print(("  %d/%d groups covered."):format(covered, nGroups))
 
-    -- ask the raid
-    local msg
-    if #missing == 0 then
-        msg = ("Aura check: all %d groups have an aura. Whisper me 'aura' or 'no' to update."):format(nGroups)
-    else
-        msg = ("Aura check! Still need an aura for %s — whisper me 'aura' if you have one for your group."):format(
-            table.concat(missing, ", "))
-    end
+    -- Batch collect: ask everyone to reply in raid/party chat, listen for a window,
+    -- then whisper anyone who didn't answer.
+    self._collectUntil = GetTime() + ROLE_CHECK_WINDOW
+    self._collected = {}
     local chan = GetNumRaidMembers() > 0 and "RAID" or (GetNumPartyMembers() > 0 and "PARTY" or "SAY")
-    SendChatMessage(msg, chan)
+    SendChatMessage(
+        "GroupBuilder role check — reply here with your role + aura: e.g. 'tank aura', 'heal no', 'dps'  "
+        .. "(or numbers: 1=tank 2=heal 3=aura, like '1 3'). No reply and I'll whisper you.", chan)
+    self:Print(("collecting role/aura replies for %ds, then whispering anyone who didn't answer."):format(ROLE_CHECK_WINDOW))
+    if self.After then self:After(ROLE_CHECK_WINDOW, function() self:RoleCheckFallback() end) end
+end
 
-    -- Whisper anyone we don't have full info on — role (esp. hand-invited people
-    -- with no recorded role) and/or aura for an uncovered group.
+-- After the raid-chat collection window: whisper anyone who didn't reply and is
+-- still missing a role or an aura for an uncovered group.
+function GB:RoleCheckFallback()
+    self._collectUntil = nil
+    self:RefreshRoster()
+    local nGroups = self.db.comp.auras or 0
+    local byGroup = {}
+    for _, m in ipairs(self.roster) do
+        local c = self.claims[m.name]
+        if c and c.aura then byGroup[m.subgroup or 1] = true end
+    end
     local uncovered = {}
     for g = 1, nGroups do if not byGroup[g] then uncovered[g] = true end end
+
     local me = self:MyName()
     local now = GetTime()
     local asked = 0
     for _, m in ipairs(self.roster) do
-        if m.name ~= me and (not checkAsked[m.name] or (now - checkAsked[m.name]) > 10) then
+        if m.name ~= me and not (self._collected and self._collected[m.name]) then
             local c = self.claims[m.name]
             local needRole = not (c and c.role)
             local auraUnknown = not (c and c.aura ~= nil)
             local needAura = self.db.recruit.askAura and auraUnknown and uncovered[m.subgroup or 1]
             if needRole or needAura then
                 checkAsked[m.name] = now
-                if needAura then askedAura[m.name] = now end   -- so a "no" reply counts
+                if needAura then askedAura[m.name] = now end
                 local q
                 if needRole and needAura then
                     q = ("what's your role (tank/heals/dps) and do you have an aura for %s? Reply e.g. 'dps aura' or 'tank no'."):format(groupLabel(m.subgroup))
@@ -356,9 +425,8 @@ function GB:AuraCheck()
             end
         end
     end
-    if asked > 0 then
-        self:Print(("asked %d member(s) for role/aura info."):format(asked))
-    end
+    if asked > 0 then self:Print(("role check: whispered %d member(s) who didn't reply in chat."):format(asked))
+    else self:Print("role check done — everyone replied (or nothing left to ask).") end
 end
 
 GB:On("CHAT_MSG_WHISPER", function(_, msg, author)

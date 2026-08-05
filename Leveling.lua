@@ -41,6 +41,30 @@ local function amLeader()
     return IsPartyLeader() and true or false
 end
 
+-- On Ascension UninviteUnit is a protected function: an addon can't call it while
+-- you're in combat (the client blocks it — "prevented the call of the secure
+-- function"). So if we're in combat, queue the removal and do it the instant combat
+-- ends. Direct /gb ktest works because a real keypress is a hardware event.
+GB._pendingKicks = GB._pendingKicks or {}
+function GB:SafeKick(name)
+    name = self:NormName(name)
+    if InCombatLockdown and InCombatLockdown() then
+        self._pendingKicks[name] = true
+        self:Print("in combat — will remove |cffffcc00" .. name .. "|r the moment combat ends.")
+        return
+    end
+    UninviteUnit(name)
+end
+
+GB:On("PLAYER_REGEN_ENABLED", function()
+    if not (GB._pendingKicks and next(GB._pendingKicks)) then return end
+    for name in pairs(GB._pendingKicks) do
+        GB._pendingKicks[name] = nil
+        UninviteUnit(name)
+        GB:Print("removed |cffffcc00" .. name .. "|r (was queued during combat).")
+    end
+end)
+
 -- The level at which mobs actually scale up (game cap). The Max level box is the
 -- (optionally lower) autokick threshold.
 local SCALE_LEVEL = 60
@@ -201,8 +225,8 @@ function GB:AutoKick(name)
     local role = self.claims[name] and self.claims[name].role
     self:Reply(name, ("%s: thanks for coming! I'm removing you now you've hit %d, so you don't scale the mobs to 60 for the rest of the group. GG — whisper me for a re-invite once you've rerolled!"):format(
         self:Tag(), self.db.leveling.maxLevel or 59))
-    -- 3.3.5 UninviteUnit takes the player NAME (not a "raidN" unit token).
-    UninviteUnit(name)
+    -- UninviteUnit takes the player NAME (3.3.5); SafeKick defers it if we're in combat.
+    self:SafeKick(name)
     self:Print("|cffffcc00" .. name .. "|r hit " .. (self.db.leveling.maxLevel or 59) .. " — auto-kicked (not whitelisted).")
 
     -- Private on-screen alert if we lost a tank or healer.
