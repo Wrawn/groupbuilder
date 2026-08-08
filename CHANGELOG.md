@@ -10,6 +10,18 @@ section here.
 
 ## [Unreleased]
 ### Fixed
+- **No longer taints Blizzard's secure popups** (which was blocking rogue poisons /
+  enchant replacement — "tainted the call of the secure function 'ReplaceEnchant'").
+  Cause: the addon reassigned the global `StaticPopupDialogs` table; it now only adds its
+  own keys, never touches the table itself.
+- **Autokick/reform wait ~5s after zoning into a new map.** Right after a load screen the
+  raid roster isn't populated, so a kick/reform fired immediately removed no one and left
+  only you. There's now a short grace window after each zone-in before autokick/reform can
+  fire, so the roster is settled and the kick actually works.
+- **Reform in combat now disbands properly.** `UninviteUnit`/`LeaveParty` are protected
+  and blocked mid-combat, so a reform fired during a fight kicked no one and left only
+  *you* — everyone else stayed in the Manastorm. Reform now warns the raid immediately,
+  then queues the disband + leave and runs it the instant combat ends.
 - **Number fields in the options no longer show blank.** Width/height, tanks/healers/
   dps/auras, kick-at-level, etc. now populate with their saved values every time you
   open a panel (they're re-read from your settings on show, not just once at login).

@@ -104,8 +104,9 @@ end
 -- ---------------------------------------------------------------------------
 --  Confirmation (button on the monitor + /gb pass)
 -- ---------------------------------------------------------------------------
-StaticPopupDialogs = StaticPopupDialogs or {}
-
+-- NB: never assign to StaticPopupDialogs itself (e.g. `= StaticPopupDialogs or {}`) —
+-- that taints the global table and blocks Blizzard's secure popups (ReplaceEnchant /
+-- applying poisons, etc.). Only ever add keys to it, which is always safe.
 StaticPopupDialogs["GROUPBUILDER_PASSLEAD"] = {
     text = "Pass raid lead to %s and LEAVE?\nEveryone is promoted to assist first, and the key roles are announced to the raid.",
     button1 = "Pass & Leave", button2 = "Cancel",

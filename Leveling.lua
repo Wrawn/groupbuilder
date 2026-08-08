@@ -57,17 +57,27 @@ function GB:SafeKick(name)
 end
 
 GB:On("PLAYER_REGEN_ENABLED", function()
-    if not (GB._pendingKicks and next(GB._pendingKicks)) then return end
-    for name in pairs(GB._pendingKicks) do
-        GB._pendingKicks[name] = nil
-        UninviteUnit(name)
-        GB:Print("removed |cffffcc00" .. name .. "|r (was queued during combat).")
+    -- flush single autokicks queued during combat
+    if GB._pendingKicks and next(GB._pendingKicks) then
+        for name in pairs(GB._pendingKicks) do
+            GB._pendingKicks[name] = nil
+            UninviteUnit(name)
+            GB:Print("removed |cffffcc00" .. name .. "|r (was queued during combat).")
+        end
+    end
+    -- run a full reform disband/leave that was queued during combat
+    if GB._pendingReform then
+        local fn = GB._pendingReform
+        GB._pendingReform = nil
+        GB:Print("combat ended — disbanding & leaving now.")
+        fn()
     end
 end)
 
 -- The level at which mobs actually scale up (game cap). The Max level box is the
 -- (optionally lower) autokick threshold.
 local SCALE_LEVEL = 60
+local ZONE_GRACE = 5   -- seconds after zoning before autokick/reform may fire
 
 -- Consider a member's level.
 --  * Crossing SCALE_LEVEL (60) always means the group scaled -> full reform.
@@ -75,6 +85,11 @@ local SCALE_LEVEL = 60
 --    single-kicked (removed before they can scale the group) — no reform needed.
 local function considerLevel(name, level)
     if not name or not level or level <= 0 then return end
+    -- Just zoned into a new map? The roster/levels aren't loaded yet, so a kick or
+    -- reform fired now removes nobody (UninviteUnit gets nil names) and only YOU leave.
+    -- Hold off until the grace window passes — the periodic scan re-checks once the
+    -- roster has settled. (Don't update levelSeen, so a real ding still registers after.)
+    if GB._zoneGraceUntil and GetTime() < GB._zoneGraceUntil then return end
     name = GB:NormName(name)
     if name == GB:NormName(UnitName("player")) then
         levelSeen[name] = level
@@ -160,6 +175,12 @@ scanFrame:SetScript("OnUpdate", function(_, elapsed)
     if acc >= 3 then acc = 0; scanLevels() end
 end)
 
+-- Start a grace window whenever we load into a new map, so autokick/reform hold off
+-- until the roster is populated (otherwise the kick removes no one and only you leave).
+local function startZoneGrace() GB._zoneGraceUntil = GetTime() + ZONE_GRACE end
+GB:On("PLAYER_ENTERING_WORLD", startZoneGrace)
+GB:On("ZONE_CHANGED_NEW_AREA", startZoneGrace)
+
 -- Prime levels so pre-existing 60s never trigger a reform.
 GB:On("PLAYER_ENTERING_WORLD", function() scanLevels() end)
 GB:On("PARTY_MEMBERS_CHANGED", function() scanLevels() end)
@@ -223,7 +244,7 @@ function GB:AutoKick(name)
     if self._autoKicked[name] then return end
     self._autoKicked[name] = true
     local role = self.claims[name] and self.claims[name].role
-    self:Reply(name, ("%s: thanks for coming! I'm removing you now you've hit %d, so you don't scale the mobs to 60 for the rest of the group. GG — whisper me for a re-invite once you've rerolled!"):format(
+    self:Reply(name, ("%s: thanks for coming! I'm removing you now you've hit %d, so you don't scale the mobs to 60 for the rest of the group. GG!"):format(
         self:Tag(), self.db.leveling.maxLevel or 59))
     -- UninviteUnit takes the player NAME (3.3.5); SafeKick defers it if we're in combat.
     self:SafeKick(name)
@@ -329,42 +350,50 @@ function GB:ReformGroup(dinger)
         self:Reply(name, self:Tag() .. ": reforming to reset scaling — pst me 'reform' for a re-invite!")
     end
 
-    -- 3) Kick everyone. Primary (raid): uninvite every other raid member then
-    --    LeaveParty() to fully dissolve. Fallback: uninvite by name, dinger first.
-    local usedFast = false
-    if GetNumRaidMembers() > 0 and LeaveParty then
-        -- Snapshot names first, THEN uninvite (by name — 3.3.5), so removing one
-        -- can't shift the roster and make us skip the next.
-        local names = {}
-        for i = 1, GetNumRaidMembers() do
-            local uname = UnitName("raid" .. i)
-            if uname and GB:NormName(uname) ~= me then names[#names + 1] = uname end
-        end
-        for _, uname in ipairs(names) do UninviteUnit(uname) end
-        LeaveParty()
-        usedFast = true
-    end
-    if not usedFast then
-        if dinger then UninviteUnit(dinger) end
-        for _, m in ipairs(self.roster) do
-            if m.name ~= me and m.name ~= dinger then UninviteUnit(m.name) end
-        end
-    end
-
     self._reformPending = true   -- auto-reinvite once we leave the instance
 
-    -- Auto-leave the Manastorm (only if we're actually inside one), a beat after the
-    -- kick so the warning/whispers/uninvites flush. Loading out fires the re-invites
-    -- automatically (reformLeaveCheck). /gb reinvite + the 'reform' whisper stay as a
-    -- fallback for anyone who doesn't leave right away.
-    local inInstance = IsInInstance and IsInInstance()
-    if self.db.leveling.autoLeave ~= false and inInstance then
-        self:Print(("Kicked %d member(s) — leaving the Manastorm now; re-invites go out once you load out."):format(#keepers))
-        self:After(1.5, function() self:LeaveInstance() end)
-    else
-        self:Print(("Kicked & whispered %d member(s). Leave the Manastorm and I'll auto-reinvite (or /gb reinvite)."):format(#keepers))
+    -- 3) Kick everyone + auto-leave. UninviteUnit / LeaveParty / the Manastorm leave are
+    --    protected on Ascension and BLOCKED in combat — which left everyone stuck in the
+    --    instance and only YOU leaving. So if we're mid-fight, queue the whole disband
+    --    and run it the instant combat ends. Primary (raid): uninvite each by name, then
+    --    LeaveParty() to fully dissolve. Fallback: uninvite by name, dinger first.
+    local function performKick()
+        local usedFast = false
+        if GetNumRaidMembers() > 0 and LeaveParty then
+            -- Snapshot names first, THEN uninvite, so removing one can't shift the
+            -- roster and make us skip the next.
+            local names = {}
+            for i = 1, GetNumRaidMembers() do
+                local uname = UnitName("raid" .. i)
+                if uname and GB:NormName(uname) ~= me then names[#names + 1] = uname end
+            end
+            for _, uname in ipairs(names) do UninviteUnit(uname) end
+            LeaveParty()
+            usedFast = true
+        end
+        if not usedFast then
+            if dinger then UninviteUnit(dinger) end
+            for _, m in ipairs(self.roster) do
+                if m.name ~= me and m.name ~= dinger then UninviteUnit(m.name) end
+            end
+        end
+
+        local inInstance = IsInInstance and IsInInstance()
+        if self.db.leveling.autoLeave ~= false and inInstance then
+            self:Print(("Kicked %d member(s) — leaving the Manastorm now; re-invites go out once you load out."):format(#keepers))
+            self:After(1.5, function() self:LeaveInstance() end)
+        else
+            self:Print(("Kicked & whispered %d member(s). Leave the Manastorm and I'll auto-reinvite (or /gb reinvite)."):format(#keepers))
+        end
+        self:RefreshRoster(); GB:UpdateAnnounce(); GB:RefreshUI()
     end
-    self:RefreshRoster(); GB:UpdateAnnounce(); GB:RefreshUI()
+
+    if InCombatLockdown and InCombatLockdown() then
+        self._pendingReform = performKick
+        self:Print("|cffffcc00in combat — will disband & leave the moment combat ends. Hold pulls!|r")
+    else
+        performKick()
+    end
 end
 
 -- Send invites to everyone on the reform list who isn't already back and isn't
